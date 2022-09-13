@@ -20,6 +20,8 @@ setup(
     tests_require=['pytest'],
     entry_points={
         'console_scripts': [
+            'wagon_node = wagon_node.script.hydrolic_joint_control:main',
+
         ],
     },
 )

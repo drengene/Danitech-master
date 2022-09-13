@@ -12,7 +12,7 @@ def generate_launch_description():
     wagon_description_path = get_package_share_directory('wagon_description')
     default_model_path = os.path.join(wagon_description_path , 'urdf', 'wagon.xacro')
     print(default_model_path)
-    default_rviz_config_path = os.path.join(get_package_share_directory('urdf_tutorial') , '/rviz/urdf.rviz')
+    default_rviz_config_path = os.path.join(wagon_description_path, 'rviz' , 'wagon_model.rviz')
 
     gui_arg = DeclareLaunchArgument(name='gui', default_value='false', choices=['true', 'false'],
                                     description='Flag to enable joint_state_publisher_gui')

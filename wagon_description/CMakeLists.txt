@@ -12,7 +12,7 @@ find_package(urdf)
 # further dependencies manually.
 # find_package(<dependency> REQUIRED)
 
-install(DIRECTORY meshes urdf
+install(DIRECTORY meshes urdf rviz
   DESTINATION share/${PROJECT_NAME}
 )
 
