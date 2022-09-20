@@ -48,7 +48,7 @@
     <visual>
       <origin rpy="0 0 1.57" xyz="0 0 0"/>
       <geometry>
-        <mesh filename="/home/daniel/master_ws/install/wagon_description/share/wagon_description/meshes/bases/Simplified_Front_Centered.stl" scale="0.001 0.001 0.001"/>
+        <mesh filename="meshes/bases/Simplified_Front_Centered.stl" scale="0.001 0.001 0.001"/>
       </geometry>
       <material name="white"/>
     </visual>
@@ -82,7 +82,7 @@
     <visual>
       <origin rpy="0 0 1.57" xyz="0 0 0"/>
       <geometry>
-        <mesh filename="/home/daniel/master_ws/install/wagon_description/share/wagon_description/meshes/bases/Simplified_Back_Centered.stl" scale="0.001 0.001 0.001"/>
+        <mesh filename="meshes/bases/Simplified_Back_Centered.stl" scale="0.001 0.001 0.001"/>
       </geometry>
       <material name="white"/>
     </visual>
@@ -110,7 +110,7 @@
     <visual>
       <origin rpy="1.57 0 0" xyz="0 0 0"/>
       <geometry>
-        <mesh filename="/home/daniel/master_ws/install/wagon_description/share/wagon_description/meshes/wheels/Wheel.stl" scale="0.001 0.001 0.001"/>
+        <mesh filename="meshes/wheels/Wheel.stl" scale="0.001 0.001 0.001"/>
         <!--
       <origin xyz="0 0 0" rpy="0 0 0"/>
       <geometry>
@@ -141,7 +141,7 @@
     <visual>
       <origin rpy="1.57 0 0" xyz="0 0 0"/>
       <geometry>
-        <mesh filename="/home/daniel/master_ws/install/wagon_description/share/wagon_description/meshes/wheels/Wheel.stl" scale="0.001 0.001 0.001"/>
+        <mesh filename="meshes/wheels/Wheel.stl" scale="0.001 0.001 0.001"/>
         <!--
       <origin xyz="0 0 0" rpy="0 0 0"/>
       <geometry>
@@ -172,7 +172,7 @@
     <visual>
       <origin rpy="1.57 0 0" xyz="0 0 0"/>
       <geometry>
-        <mesh filename="/home/daniel/master_ws/install/wagon_description/share/wagon_description/meshes/wheels/Wheel.stl" scale="0.001 0.001 0.001"/>
+        <mesh filename="meshes/wheels/Wheel.stl" scale="0.001 0.001 0.001"/>
         <!--
       <origin xyz="0 0 0" rpy="0 0 0"/>
       <geometry>
@@ -203,7 +203,7 @@
     <visual>
       <origin rpy="1.57 0 0" xyz="0 0 0"/>
       <geometry>
-        <mesh filename="/home/daniel/master_ws/install/wagon_description/share/wagon_description/meshes/wheels/Wheel.stl" scale="0.001 0.001 0.001"/>
+        <mesh filename="meshes/wheels/Wheel.stl" scale="0.001 0.001 0.001"/>
         <!--
       <origin xyz="0 0 0" rpy="0 0 0"/>
       <geometry>
