@@ -42,7 +42,7 @@ def generate_launch_description():
     gz_sim = IncludeLaunchDescription(
         PythonLaunchDescriptionSource(
             os.path.join(pkg_ros_gz_sim, 'launch', 'ign_gazebo.launch.py')),
-        launch_arguments={'ign_args': 'heightmap.sdf'}.items(),
+        launch_arguments={'ign_args': 'empty.sdf'}.items(),
 
     )
 
@@ -87,13 +87,13 @@ def generate_launch_description():
     # Bridge
         # Gz - ROS Bridge
     bridge = Node(
-            package='ros_ign_gazebo',
+            package='ros_ign_bridge',
             executable='parameter_bridge',
             arguments=[
-                '/world/empty/model/wagon/joint_state@sensor_msgs/msg/JointState@ignition.msgs.Model',
-                '/model/wagon/pose@tf2_msgs/msg/TFMessage@ignition.msgs.Pose_V',
-                '/joint_states@sensors_msgs/msg/JointState@ignition.msgs.Model',
-                '/tf@tf2_msgs/msg/TFMessage@ignition.msgs.Pose_V'
+                #'/world/empty/model/wagon/joint_state@sensor_msgs/msg/JointState@ignition.msgs.Model',
+                #'/model/wagon/pose@tf2_msgs/msg/TFMessage@ignition.msgs.Pose_V',
+                #'/joint_states@sensors_msgs/msg/JointState@ignition.msgs.Model',
+                #'/tf@tf2_msgs/msg/TFMessage@ignition.msgs.Pose_V'
             ],
             #remappings=[
             #    ('/model/wagon/pose', '/tf'),
@@ -103,13 +103,20 @@ def generate_launch_description():
     # bridge = Node(
     #     package='ros_ign_bridge',
     #     executable='parameter_bridge',
-    #     arguments=['/cmd_vel@geometry_msgs/msg/Twist@ignition.msgs.Twist',
-    #                '/odometry@nav_msgs/msg/Odometry@ignition.msgs.Odometry',
-    #                '/cmd_vel@geometry_msgs/msg/Twist@ignition.msgs.Twist',
-    #                '/odometry@nav_msgs/msg/Odometry@ignition.msgs.Odometry'],
-    #     #parameters=[{'qos_overrides..subscriber.reliability': 'reliable',
-    #     #             'qos_overrides..subscriber.reliability': 'reliable'}],
-    #     output='screen'
+    #         arguments=[
+                
+    #             #'/world/empty/model/wagon/joint_state@'
+    #             #'sensor_msgs/msg/JointState[ignition.msgs.Model',
+    #             #'/model/wagon/pose@'
+    #             #'tf2_msgs/msg/TFMessage[ignition.msgs.Pose_V',
+    #             # '/world/empty/model/wagon/joint_state@'
+    #             # 'sensor_msgs/msg/JointState[ignition.msgs.Model',
+
+    #         ],
+    #         remappings=[
+    #             ('/model/wagon/pose', '/tf'),
+    #             ('/world/empty/model/wagon/joint_state', '/joint_states')
+    #         ]
     # )
 
     return LaunchDescription([

@@ -301,5 +301,40 @@
         </material>
       </visual>
     </link>
+    <plugin
+        filename="ignition-gazebo-joint-state-publisher-system"
+        name="ignition::gazebo::systems::JointStatePublisher">
+    </plugin>
+
+    <plugin
+        filename="ignition-gazebo-pose-publisher-system"
+        name="ignition::gazebo::systems::PosePublisher">
+        <publish_link_pose>true</publish_link_pose>
+
+        <use_pose_vector_msg>true</use_pose_vector_msg>
+    </plugin>
+    <!-- <plugin
+        filename="ignition-gazebo-joint-controller-system"
+        name="ignition::gazebo::systems::JointController">
+        <joint_name>hydrolic_joint</joint_name>
+        <topic>/hydrolic_joint/cmd_vel</topic>
+        <initial_velocity>2</initial_velocity>
+    </plugin> -->
+
+    <plugin
+        filename="ignition-gazebo-joint-position-controller-system"
+        name="ignition::gazebo::systems::JointPositionController">
+        <joint_name>hydrolic_joint</joint_name>
+        <joint_index>0</joint_index>
+        <p_gain>500</p_gain>
+        <i_gain>0.1</i_gain>
+        <d_gain>0.1</d_gain>
+        <i_max>1</i_max>
+        <i_min>-1</i_min>
+        <cmd_max>1000</cmd_max>
+        <cmd_offset>0</cmd_offset> 
+
+    </plugin>
+
   </model>
 </sdf>
