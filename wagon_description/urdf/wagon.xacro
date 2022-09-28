@@ -248,4 +248,44 @@
     </inertial>
   </link>
 
+
+  <joint name="imu_joint" type="fixed">
+    <parent link="base_link"/>
+    <child link="imu_link"/>
+    <origin xyz="-0.032 0 0.068" rpy="0 0 0"/>
+  </joint>
+
+  <link name="imu_link"/>
+
+  <joint name="scan_joint" type="fixed">
+    <parent link="base_link"/>
+    <child link="base_scan"/>
+    <origin xyz="0 0 0.272" rpy="0 0 0"/>
+  </joint>
+
+  <link name="base_scan">
+    <visual>
+      <origin xyz="0 0 -0.036" rpy="${pi/2} 0 0"/>
+      <geometry>
+        <mesh filename="package://wagon_description/meshes/sensors/ouster_OS1.dae" scale="1 1 1"/>
+      </geometry>
+      <material name="dark"/>
+    </visual>
+
+    <collision>
+      <origin xyz="0 0 -0.036" rpy="0 0 0"/>
+      <geometry>
+        <cylinder length="0.072" radius="0.079"/>
+      </geometry>
+    </collision>
+
+    <inertial>
+      <mass value="0.314" />
+      <origin xyz="0 0 0" />
+      <inertia ixx="0.001" ixy="0.0" ixz="0.0" iyy="0.001" iyz="0.0" izz="0.001" />
+    </inertial>
+  </link>
+
+
+
 </robot>
