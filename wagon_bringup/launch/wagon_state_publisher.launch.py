@@ -10,7 +10,7 @@ from launch_ros.parameter_descriptions import ParameterValue
 
 def generate_launch_description():
     wagon_description_path = get_package_share_directory('wagon_description')
-    default_model_path = os.path.join(wagon_description_path , 'urdf', 'wagon.xacro')
+    default_model_path = os.path.join(wagon_description_path , 'urdf', 'wagon.urdf')
     print(default_model_path)
     default_rviz_config_path = os.path.join(wagon_description_path, 'rviz' , 'wagon_model.rviz')
 
@@ -39,20 +39,21 @@ def generate_launch_description():
         arguments=["model"],
     )
 
-    # Depending on gui parameter, either launch joint_state_publisher or joint_state_publisher_gui
+    # # Depending on gui parameter, either launch joint_state_publisher or joint_state_publisher_gui
     joint_state_publisher_node = Node(
         package='joint_state_publisher',
         executable='joint_state_publisher',
+        name="joint_state_publisher",
         arguments=[default_model_path],
-        condition=UnlessCondition(LaunchConfiguration('gui'))
+        #condition=UnlessCondition(LaunchConfiguration('gui'))
     )
 
-    joint_state_publisher_gui_node = Node(
-        package='joint_state_publisher_gui',
-        executable='joint_state_publisher_gui',
+    # joint_state_publisher_gui_node = Node(
+    #     package='joint_state_publisher_gui',
+    #     executable='joint_state_publisher_gui',
 
-        condition=IfCondition(LaunchConfiguration('gui'))
-    )
+    #     condition=IfCondition(LaunchConfiguration('gui'))
+    # )
 
     rviz_node = Node(
         package='rviz2',
@@ -70,7 +71,7 @@ def generate_launch_description():
         rviz_arg,
         use_sim_time,
         joint_state_publisher_node,
-        joint_state_publisher_gui_node,
+        #joint_state_publisher_gui_node,
         robot_state_publisher_node,
         rviz_node
     ])
