@@ -3,6 +3,7 @@ import rclpy
 from rclpy.node import Node
 from geometry_msgs.msg import Twist
 from sensor_msgs.msg import JointState
+import numpy as np
 
 class WheelVelTranslator(Node):
     def __init__(self):
@@ -26,13 +27,13 @@ class WheelVelTranslator(Node):
         self.joint_state_subscription = self.create_subscription(JointState, '/joint_states', self.joint_state_callback, 10)
         # Create a publisher for the topic /wheel_vel
 
+        self.alpha = None
+        self.v = None
+
 
     def cmd_vel_callback(self, msg):
-        # Calculate the wheel velocities
-        v = msg.linear.x
-        w = msg.angular.z
-        # Publish the wheel velocities
-        self.get_logger().info('Publishing wheel velocities')
+        self.v_front = msg.linear.x
+        self.alpha = msg.angular.z
 
     def joint_state_callback(self, msg):
         # Get the joint positions
@@ -41,7 +42,15 @@ class WheelVelTranslator(Node):
         pass
 
     def calc_control_vel(self):
-        pass
+        # First we calculate the relationship between linear front and rear center velocity
+        # Then we calculate the linear front and rear wheel velocities
+        # Finally we calculate the wheel velocities
+        relationship = (self.front_base_radius + self.rear_base_radius * np.cos(self.alpha) ) / (self.rear_base_radius + self.front_base_radius * np.cos(self.alpha))
+        v_rear = relationship * self.v_front
+        v_front_left = self.v_front - self.front_wheel_separation * self.alpha / 2
+        v_front_right = self.v_front + self.front_wheel_separation * self.alpha / 2
+        v_rear_left = v_rear - self.rear_wheel_separation * self.alpha / 2
+        v_rear_right = v_rear + self.rear_wheel_separation * self.alpha / 2
     
 
 
