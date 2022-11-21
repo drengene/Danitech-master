@@ -4,7 +4,7 @@
   <name>wheel_vel_translator</name>
   <version>0.0.0</version>
   <description>TODO: Package description</description>
-  <maintainer email="Daniel Holm">danitech</maintainer>
+  <maintainer email="rajun18@student.sdu.dk">Rasmus Junge</maintainer>
   <license>TODO: License declaration</license>
 
   <test_depend>ament_copyright</test_depend>

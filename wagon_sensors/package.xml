@@ -4,7 +4,7 @@
   <name>wagon_sensors</name>
   <version>0.0.0</version>
   <description>TODO: Package description</description>
-  <maintainer email="Daniel Holm">danitech</maintainer>
+  <maintainer email="dahol18@student.sdu.dk">danitech</maintainer>
   <license>TODO: License declaration</license>
 
   <buildtool_depend>ament_cmake</buildtool_depend>
