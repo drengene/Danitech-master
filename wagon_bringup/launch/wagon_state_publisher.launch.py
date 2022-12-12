@@ -14,7 +14,7 @@ def generate_launch_description():
     print(default_model_path)
     default_rviz_config_path = os.path.join(wagon_description_path, 'rviz' , 'wagon_model.rviz')
 
-    gui_arg = DeclareLaunchArgument(name='gui', default_value='false', choices=['true', 'false'],
+    gui_arg = DeclareLaunchArgument(name='gui', default_value='true', choices=['true', 'false'],
                                     description='Flag to enable joint_state_publisher_gui')
 
     model_arg = DeclareLaunchArgument(name='model', default_value=default_model_path,
@@ -45,15 +45,15 @@ def generate_launch_description():
         executable='joint_state_publisher',
         name="joint_state_publisher",
         arguments=[default_model_path],
-        #condition=UnlessCondition(LaunchConfiguration('gui'))
+        condition=UnlessCondition(LaunchConfiguration('gui'))
     )
 
-    # joint_state_publisher_gui_node = Node(
-    #     package='joint_state_publisher_gui',
-    #     executable='joint_state_publisher_gui',
+    joint_state_publisher_gui_node = Node(
+        package='joint_state_publisher_gui',
+        executable='joint_state_publisher_gui',
 
-    #     condition=IfCondition(LaunchConfiguration('gui'))
-    # )
+        condition=IfCondition(LaunchConfiguration('gui'))
+    )
 
     rviz_node = Node(
         package='rviz2',
@@ -71,7 +71,7 @@ def generate_launch_description():
         rviz_arg,
         use_sim_time,
         joint_state_publisher_node,
-        #joint_state_publisher_gui_node,
+        joint_state_publisher_gui_node,
         robot_state_publisher_node,
         rviz_node
     ])
