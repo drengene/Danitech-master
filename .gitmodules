@@ -1,0 +1,4 @@
+[submodule "wagon_sensors/rtk-n-trip-rover"]
+	path = wagon_sensors/rtk-n-trip-rover
+	url = https://gitlab.com/dahol18/rtk-n-trip-rover.git
+	branch = ros2
