@@ -67,6 +67,7 @@ from include.Sensors.imu import IMU
 from include.Sensors.lidar_3d import lidar
 from include.TF.joint_state_publisher import joint_state_pub
 from include.Sensors.gps import gps_pub
+from sensor_msgs.msg import JointState
 # To run file in terminal, use:
 # ~/.local/share/ov/pkg/isaac_sim-2022.1.1/python.sh wagon_in_scene.py
 
@@ -93,16 +94,22 @@ class IsaacSim(Node):
         self.world.reset()
         print( "This robot valid innit:" ,self.robot.is_valid())
 
- 
-
         self.i = 0
         self.twist_sub = self.create_subscription(
             Twist,
-            'mouse_vel',
+            'direct_cmd_vel',
             self.cmd_vel_callback,
             1)
-        print("Subscribed to cmd_vel")
+        print("Subscribed to direct_cmd_vel")
         self.twist_sub  # prevent unused variable warning
+
+        self.joint_state_sub = self.create_subscription(
+            JointState,
+            'joint_states_controller',
+            self.joint_state_controller_callback,
+            1)
+        print("Subscribed to joint_states_controller")
+            
         
 
 
@@ -139,6 +146,7 @@ class IsaacSim(Node):
         self.robot.apply_action(
             ArticulationAction(joint_positions=[msg.angular.z], joint_indices=[1])
         )
+        
 
     def import_usd(self):
         path = "/home/danitech/isaac_ws/environments/grass_terrain.usd"
@@ -153,7 +161,25 @@ class IsaacSim(Node):
 
         self.world.reset()
 
+    def joint_state_controller_callback(self, msg):
+        #print("Callback")
+        #self.get_logger().info('I heard: "%s"' % msg)
+        wheel_joint_indices = [msg.name.index("wheel_front_left_joint"), msg.name.index("wheel_front_right_joint"), msg.name.index("wheel_rear_left_joint"), msg.name.index("wheel_rear_right_joint")]
+        wheel_velocities = [msg.velocity[wheel_joint_indices[0]], msg.velocity[wheel_joint_indices[1]], msg.velocity[wheel_joint_indices[2]], msg.velocity[wheel_joint_indices[3]]]
+        self.robot.apply_action(
+            ArticulationAction(joint_velocities=wheel_velocities, joint_indices=[2,3,4,5])
+        )
 
+        hydraulic_joint_index = msg.name.index("hydraulic_joint")
+        hydraulic_position = msg.position[hydraulic_joint_index]
+        self.robot.apply_action(
+            ArticulationAction(joint_positions=[hydraulic_position], joint_indices=[1])
+        )
+
+        # Print with nice formatting
+        print("Joint States:")
+        for i in range(len(msg.name)):
+            print("  ", msg.name[i], ":", msg.position[i], ":", msg.velocity[i])
 
 
 

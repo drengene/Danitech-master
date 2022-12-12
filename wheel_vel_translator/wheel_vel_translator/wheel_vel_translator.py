@@ -11,38 +11,68 @@ class WheelVelTranslator(Node):
         super().__init__('wheel_vel_translator')
         # Declare and acquire parameters
         from rcl_interfaces.msg import ParameterDescriptor
-        self.declare_parameter('wheel_radius', 0.1, ParameterDescriptor(description="Wheel radius"))
-        self.declare_parameter('front_wheel_separation', 5, ParameterDescriptor(description="Separation between front wheels"))
-        self.declare_parameter('rear_wheel_separation', 5, ParameterDescriptor(description="Separation between rear wheels"))
-        self.declare_parameter('front_base_radius', 5, ParameterDescriptor(description="Length from articulated joint to front wheel axel"))
-        self.declare_parameter('rear_base_radius', 10, ParameterDescriptor(description="Length from articulated joint to rear wheel axel"))
+        self.declare_parameter('wheel_radius', 0.292, ParameterDescriptor(description="Wheel radius"))
+        self.declare_parameter('front_wheel_separation', 0.963, ParameterDescriptor(description="Separation between front wheels"))
+        self.declare_parameter('rear_wheel_separation', 0.963, ParameterDescriptor(description="Separation between rear wheels"))
+        self.declare_parameter('front_base_radius', 0.6948+0.085, ParameterDescriptor(description="Length from articulated joint to front wheel axel"))
+        self.declare_parameter('rear_base_radius', 0.8716-0.085, ParameterDescriptor(description="Length from articulated joint to rear wheel axel"))
 
+        # Declare topic parameters
+        self.declare_parameter('cmd_vel_topic', '/mouse_vel', ParameterDescriptor(description="Topic for receiving velocity commands"))
+        self.declare_parameter('joint_state_topic', '/joint_states', ParameterDescriptor(description="Topic for receiving joint states"))
+        self.declare_parameter('joint_state_control_topic', '/joint_states_controller', ParameterDescriptor(description="Topic for publishing joint controls"))
+
+        # Get the parameters
         self.wheel_radius = self.get_parameter('wheel_radius').value
         self.front_wheel_separation = self.get_parameter('front_wheel_separation').value
         self.rear_wheel_separation = self.get_parameter('rear_wheel_separation').value
         self.front_base_radius = self.get_parameter('front_base_radius').value
         self.rear_base_radius = self.get_parameter('rear_base_radius').value
 
-        # Create a subscriber to the topic /cmd_vel
-        self.subscription = self.create_subscription(Twist, '/cmd_vel', self.cmd_vel_callback, 10)
-        # Create a subscriber to the topic /joint_states
-        self.joint_state_subscription = self.create_subscription(JointState, '/joint_states', self.joint_state_callback, 10)
-        # Create a publisher for the topic /wheel_vel
-        self.publisher_ = self.create_publisher(JointState, '/wheel_vel', 10)
+        # Get the topic parameters
+        self.cmd_vel_topic = self.get_parameter('cmd_vel_topic').value
+        self.joint_state_topic = self.get_parameter('joint_state_topic').value
+        self.joint_state_control_topic = self.get_parameter('joint_state_control_topic').value
 
-        self.alpha = None
-        self.v = None
+        # Create a subscriber to the topic /cmd_vel
+        self.subscription = self.create_subscription(Twist, self.cmd_vel_topic, self.cmd_vel_callback, 10)
+        
+        # Create a subscriber to the topic /joint_states
+        self.joint_state_subscription = self.create_subscription(JointState, self.joint_state_topic, self.joint_state_callback, 10)
+
+        # Create a publisher for the topic /joint_states_control. This topic publishes the joint velocities or positions
+        self.publisher_ = self.create_publisher(JointState, self.joint_state_control_topic, 10)
+
+        self.alpha = 0.0
+        self.alpha_request = 0.0
+        self.v = 0.0
 
 
     def cmd_vel_callback(self, msg):
         self.v = msg.linear.x
-        self.alpha = msg.angular.z
+        self.alpha_request = msg.angular.z
+        self.send_control_vel()
+
+        
 
     def joint_state_callback(self, msg):
-        # Get the joint positions
-        # Calculate the base velocity
-        # Publish the base velocity
-        pass
+        # Find the joint index for the hydraulic joint
+        hydraulic_joint_index = msg.name.index('hydraulic_joint')
+        # Get the joint position
+        self.alpha = msg.position[hydraulic_joint_index]
+        # Calculate the wheel velocities and publish them
+        self.send_control_vel()
+
+    def send_control_vel(self):
+        v_wheels = self.calc_control_vel()
+        joint_state = JointState()
+        joint_state.name = ['wheel_front_left_joint', 'wheel_front_right_joint', 'wheel_rear_left_joint', 'wheel_rear_right_joint', 'hydraulic_joint']
+        #print(v_wheels)
+        joint_state.velocity = [v_wheels[0], v_wheels[1], v_wheels[2], v_wheels[3], 0.0]
+        joint_state.position = [0.0, 0.0, 0.0, 0.0, self.alpha_request]
+        #print(joint_state)
+        self.publisher_.publish(joint_state)
+
 
     def calc_control_vel(self):
         # Calculate the wheel velocities
@@ -113,9 +143,9 @@ def main():
     rclpy.init()
     translator = WheelVelTranslator()
     # Create test values
-    translator.v = 1
+    translator.v = 0
     # Degrees to radians
-    translator.alpha = 120.00001 * np.pi / 180
+    translator.alpha = 0
     # Test the function calc_control_vel
     # Time the function by running it 100000 times with random value of alpha
     t0 = time.time()
@@ -133,6 +163,11 @@ def main():
     print('Front right wheel velocity: ', round(res[1], 2), "rad/s")
     print('Rear left wheel velocity: ', round(res[2], 2), "rad/s")
     print('Rear right wheel velocity: ', round(res[3], 2), "rad/s")
+
+    # Loop until the node is killed
+    rclpy.spin(translator)
+    # Destroy the node explicitly
+    translator.destroy_node()
     rclpy.shutdown()
 
 
