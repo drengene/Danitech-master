@@ -223,9 +223,9 @@ class IsaacSim(Node):
 
     
     def set_params(self):
+        # Set the parameters of the hydraulic joint
         stage = get_context().get_stage()
         prim_path ="/wagon/connection_link/hydraulic_joint"
-
         prim=stage.GetPrimAtPath(prim_path)
         hydraulic_s = prim.GetAttribute("drive:angular:physics:stiffness")
         hydraulic_d = prim.GetAttribute("drive:angular:physics:damping")
@@ -237,6 +237,14 @@ class IsaacSim(Node):
         print("Stiffness: ", hydraulic_s.Get())
         print("Damping: ", hydraulic_d.Get())
         print("Max Force: ", hydraulic_force.Get())
+
+        # Set the parameters of the connection joint
+        prim_path ="/wagon/base_link/connection_joint"
+        prim=stage.GetPrimAtPath(prim_path)
+        connection_s = prim.GetAttribute("drive:angular:physics:stiffness")
+        connection_d = prim.GetAttribute("drive:angular:physics:damping")
+        connection_s.Set(200.00)
+        connection_d.Set(10.00)
 
     def move_robot(self):
 
@@ -276,7 +284,6 @@ def main():
 
     isaac_sim.set_params()
 
-    print("Crash before lidar")
     #lidar = lidar_3d("/lidar", "/wagon/base_scan", "Example_Rotary")
     lidar_sim = lidar("/lidar", "/wagon/base_scan")
     time.sleep(1)

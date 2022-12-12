@@ -72,7 +72,8 @@ class lidar(Node):
         self.msg.is_dense = True
         #data = lidar_data.astype(dtype).tobytes() 
         #self.msg.data = data
-        self.msg.data = lidar_data.astype(dtype).tobytes() # This shit takes like 0.01 seconds
+        #self.msg.data = lidar_data.astype(dtype).tobytes() # This shit takes like 0.01 seconds
+        self.msg._data = lidar_data.astype(dtype).tobytes() # This is a lot faster, but unsafe and untested, as it relies on the private _data attribute
         #print("time: ", time.time() - time_now)
         self.pub.publish(self.msg)
 
