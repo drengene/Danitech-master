@@ -43,10 +43,16 @@ def generate_launch_description():
     config_directory = os.path.join(
         ament_index_python.packages.get_package_share_directory('sensors_launch'),
         'params', 'ublox_gps')
-    params = os.path.join(config_directory, 'c94_m8p_rover.yaml')
+    params = os.path.join(config_directory, 'zed_f9p.yaml')
     ublox_gps_node = launch_ros.actions.Node(package='ublox_gps',
                                              executable='ublox_gps_node',
                                              output='both',
+                                             remappings=[
+                                                ('ublox_gps_node/fix', 'rtk/fix'),
+                                                ('ublox_gps_node/fix_velocity', 'rtk/vel'),
+                                                ('ublox_gps_node/navpvt', 'rtk/navpvt'),
+                                                ('rtcm', 'rtk/rtcm')
+                                                ],
                                              parameters=[params])
 
     return launch.LaunchDescription([ublox_gps_node,
@@ -57,4 +63,5 @@ def generate_launch_description():
                                              on_exit=[launch.actions.EmitEvent(
                                                  event=launch.events.Shutdown())],
                                          )),
+
                                      ])

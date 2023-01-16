@@ -48,7 +48,7 @@ ublox_gps_node:
 
     # Enable u-blox message publishers
     publish:
-      all: true
+      all: false
       aid:
         hui: false
 
