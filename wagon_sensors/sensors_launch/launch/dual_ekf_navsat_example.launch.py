@@ -22,8 +22,8 @@ from launch.actions import DeclareLaunchArgument
 from ament_index_python.packages import get_package_share_directory
 
 def generate_launch_description():
-    robot_localization_dir = get_package_share_directory('wagon_sensors')
-    parameters_file_dir = os.path.join(robot_localization_dir, 'params')
+    robot_localization_dir = get_package_share_directory('sensors_launch')
+    parameters_file_dir = os.path.join(robot_localization_dir, 'params', "ekf")
     parameters_file_path = os.path.join(parameters_file_dir, 'dual_ekf_navsat_example.yaml')
     os.environ['FILE_PATH'] = str(parameters_file_dir)
     return LaunchDescription([
@@ -40,7 +40,7 @@ def generate_launch_description():
             name='ekf_filter_node_odom',
 	        output='screen',
             parameters=[parameters_file_path],
-            remappings=[('odometry/filtered', 'odometry/local')]           
+            remappings=[('odometry/filtered', 'odometry/local')]      # Topic that the ekf filter node publishes to     
            ),
     launch_ros.actions.Node(
             package='robot_localization', 
@@ -48,7 +48,7 @@ def generate_launch_description():
             name='ekf_filter_node_map',
 	        output='screen',
             parameters=[parameters_file_path],
-            remappings=[('odometry/filtered', 'odometry/global')]
+            remappings=[('odometry/filtered', 'odometry/global')] # Topic that the ekf filter map node publishes to (final)
            ),           
     launch_ros.actions.Node(
             package='robot_localization', 
@@ -56,11 +56,12 @@ def generate_launch_description():
             name='navsat_transform',
 	        output='screen',
             parameters=[parameters_file_path],
-            remappings=[('imu/data', 'imu/data'),
-                        ('gps/fix', 'gps/fix'), 
-                        ('gps/filtered', 'gps/filtered'),
-                        ('odometry/gps', 'odometry/gps'),
-                        ('odometry/filtered', 'odometry/global')]           
-
+            remappings=[#('imu/data', 'navheading'), # The subscribed imu topic
+                        ('imu', 'navheading'), # The subscribed IMU topic (only for initializtion, drops subscription after)
+                        ('gps/fix', 'rtk/fix'), # The subscribed gps topic
+                        ('gps/filtered', 'gps/filtered'), # The topic to publish the filtered gps data to
+                        ('odometry/gps', 'odometry/gps'), # The topic to publish the gps odometry data to
+                        ('odometry/filtered', 'odometry/global'), # The subscribed odometry topic
+            ]
            )           
 ])

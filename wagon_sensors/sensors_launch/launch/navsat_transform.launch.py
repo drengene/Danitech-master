@@ -29,6 +29,15 @@ def generate_launch_description():
             executable='navsat_transform_node',
             name='navsat_transform_node',
             output='screen',
-            parameters=[os.path.join(get_package_share_directory("robot_localization"), 'params', 'navsat_transform.yaml')],
+            parameters=[os.path.join(get_package_share_directory("sensors_launch"), 'params', 'ekf', 'navsat_transform.yaml')],
+            #remappings=[
+                # ('gps/fix', 'rtk/fix'), # The subscribed gps topic
+                # ('imu', 'navheading'), # The subscribed imu topic
+                # ('odometry/filtered', 'odom'), # The subscribed odometry topic
+                # ('gps/filtered', 'gps/filtered'), # The topic to publish the filtered gps data to
+                # ('odometry/gps', 'odom/gps'), # The topic to publish the gps odometry data to
+
+
+            #]
            ),
 ])

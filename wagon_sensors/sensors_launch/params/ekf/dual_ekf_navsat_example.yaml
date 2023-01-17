@@ -15,7 +15,7 @@ ekf_filter_node_odom:
     base_link_frame: base_link
     world_frame: odom
 
-    odom0: odometry/wheel
+    odom0: odom
     odom0_config: [false, false, false,
                   false, false, false,
                   true,  true,  true,
@@ -26,7 +26,7 @@ ekf_filter_node_odom:
     odom0_differential: false
     odom0_relative: false
 
-    imu0: imu/data
+    imu0: navheading
     imu0_config: [false, false, false,
                   true,  true,  false,
                   false, false, false,
@@ -86,7 +86,7 @@ ekf_filter_node_map:
     base_link_frame: base_link
     world_frame: map
 
-    odom0: odometry/wheel
+    odom0: odom
     odom0_config: [false, false, false,
                   false, false, false,
                   true,  true,  true,
@@ -108,7 +108,7 @@ ekf_filter_node_map:
     odom1_differential: false
     odom1_relative: false
 
-    imu0: imu/data
+    imu0: navheading
     imu0_config: [false, false, false,
                   true,  true,  false,
                   false, false, false,
@@ -162,6 +162,7 @@ navsat_transform:
     yaw_offset: 1.570796327  # IMU reads 0 facing magnetic north, not east
     zero_altitude: false
     broadcast_utm_transform: true
+    # broadcast_cartesian_transform: false
     publish_filtered_gps: true
     use_odometry_yaw: false
     wait_for_datum: false
