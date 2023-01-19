@@ -1,3 +1,4 @@
+#!/usr/bin/env python3
 
 import rclpy
 from rclpy.node import Node
@@ -22,7 +23,7 @@ class WheelVelTranslator(Node):
         self.declare_parameter('joint_state_topic', '/joint_states', ParameterDescriptor(description="Topic for receiving joint states"))
         self.declare_parameter('joint_state_control_topic', '/joint_states_controller', ParameterDescriptor(description="Topic for publishing joint controls"))
 
-        # Get the parameters
+        # Get the vehicle parameters
         self.wheel_radius = self.get_parameter('wheel_radius').value
         self.front_wheel_separation = self.get_parameter('front_wheel_separation').value
         self.rear_wheel_separation = self.get_parameter('rear_wheel_separation').value
