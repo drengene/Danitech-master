@@ -29,18 +29,16 @@ extensions.enable_extension("omni.isaac.isaac_sensor")
 
 
 class IMU(Node):
-    def __init__(self, imu_parent=None, visualize=False, name="Imu_Sensor"):
+    def __init__(self, imu_parent="/wagon/base_scan", visualize=False, name="imu_sensor", frame_id="base_scan"):
         super().__init__('imu_publisher',namespace=imu_parent)
 
         #imu_path = imu_parent + "/" + name
-        if imu_parent is None:
-            self.imu_parent = "/wagon/base_scan"
-        else:
-            self.imu_parent = imu_parent
+
+        self.imu_parent = imu_parent
             
         self.imu_name = name
         self.imu_path = self.imu_parent + "/" + self.imu_name
-
+        self.frame_id = frame_id
         self.imu_sensor = _sensor.acquire_imu_sensor_interface()
 
         asyncio.ensure_future(self.create_scenario())
@@ -63,6 +61,7 @@ class IMU(Node):
         
         for reading in sensor_reading:
             imu_msg = Imu()
+            imu_msg.header.frame_id = self.frame_id
             imu_msg.header.stamp.sec = int(reading[0])
             imu_msg.header.stamp.nanosec = int((reading[0] - int(reading[0])) * 1e9)
 

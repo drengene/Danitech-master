@@ -88,6 +88,7 @@ from include.Sensors.lidar_3d import lidar
 from include.TF.joint_state_publisher import joint_state_pub
 from include.Sensors.gps import gps_pub
 from sensor_msgs.msg import JointState
+from geometry_msgs.msg import PoseWithCovarianceStamped
 # To run file in terminal, use:
 # ~/.local/share/ov/pkg/isaac_sim-2022.1.1/python.sh wagon_in_scene.py
 
@@ -138,6 +139,18 @@ class IsaacSim(Node):
         print("Subscribed to joint_states_controller")
         self.joint_state_sub  # prevent unused variable warning
 
+        self.position_reset_pub = self.create_publisher(
+            PoseWithCovarianceStamped,
+            'set_pose',
+            1)
+
+        # Publish initial pose
+        init_pose  = PoseWithCovarianceStamped()
+        init_pose.header.frame_id = "odom"
+        self.position_reset_pub.publish(init_pose)
+        print("Publishing to initialpose")
+
+
 
     def set_physics(self):
 
@@ -161,15 +174,15 @@ class IsaacSim(Node):
 
     def import_usd(self):
         #path = "/home/danitech/isaac_ws/environments/USD/grass_terrain.usd"
-        #path = "/home/danitech/isaac_ws/environments/USD/Quarray_en_cantera.usd"
-        path = "/home/danitech/master_ws/src/Danitech-master/wagon_isaac/usd/environments/warehouse.usd"    
+        path = "/home/danitech/isaac_ws/environments/USD/Quarray_en_cantera.usd"
+        #path = "/home/danitech/master_ws/src/Danitech-master/wagon_isaac/usd/environments/warehouse.usd"    
         
         prim_path="/World"
         prim_stage = stage.add_reference_to_stage(usd_path=path, prim_path=prim_path)
         prim = XFormPrim(
             prim_path=prim_path, name="grass",
-            #position=np.array([0, 23, -87]), # Position for wagon in center of scene
-            position=np.array([0, 0, 0]),
+            position=np.array([0, 23, -87]), # Position for wagon in center of scene
+            #position=np.array([0, 0, 0]),
             #orientation=np.array([-0.7071068, 0, 0, 0.7071068])
         )
         self.world.scene.add(prim)
@@ -356,7 +369,6 @@ def main():
             rclpy.spin_once(isaac_sim, timeout_sec=0.005)
             imu.ros_pub()
 
-            lidar_sim.ros_pub()
 
             #print("time: ", time.time() - time_now)
             
@@ -364,6 +376,8 @@ def main():
             if i % 15 == 0:
                 gps_module.pub_gps_data()
                 joint_states.pub()
+                lidar_sim.ros_pub()
+
 
             if i % 600 == 0:
 

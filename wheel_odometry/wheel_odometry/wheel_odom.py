@@ -2,6 +2,7 @@
 import rclpy
 from rclpy.node import Node
 from sensor_msgs.msg import JointState
+import numpy as np
 #Import twist
 from geometry_msgs.msg import TwistWithCovarianceStamped
 
@@ -17,8 +18,8 @@ class WheelOdometry(Node):
 		self.declare_parameter('rear_base_radius', 0.8716-0.085, ParameterDescriptor(description="Length from articulated joint to rear wheel axel"))
 
 		# Declare parameters related to topic names
-		self.declare_parameter('joint_state_topic', '/joint_states', 'Joint state topic name')
-		self.declare_parameter('wheel_odom_topic', '/wheel_odom', 'Wheel odometry topic name')
+		self.declare_parameter('joint_state_topic', '/joint_states', ParameterDescriptor(description="Joint state topic name"))
+		self.declare_parameter('wheel_odom_topic', '/wheel_odom', ParameterDescriptor(description="Wheel odometry topic name"))
 
 		# Get vehicle parameters
 		self.wheel_radius = self.get_parameter('wheel_radius').value
@@ -36,6 +37,8 @@ class WheelOdometry(Node):
 
 		# Create publisher for wheel odometry
 		self.publisher = self.create_publisher(TwistWithCovarianceStamped, self.wheel_odom_topic, 10)
+
+		self.config_index = False
 
 		
 	def joint_state_callback(self, msg):
@@ -61,18 +64,18 @@ class WheelOdometry(Node):
 
 			# Compute the front wheel odometry
 			wheel_odom_front.twist.twist.linear.x = (wheel_fl_vel + wheel_fr_vel) * self.wheel_radius / 2
-			wheel_odom_front.twist.twist.angular.z = (wheel_fl_vel - wheel_fr_vel) * self.wheel_radius / self.front_wheel_separation
+			wheel_odom_front.twist.twist.angular.z = -(wheel_fl_vel - wheel_fr_vel) * self.wheel_radius / self.front_wheel_separation
 
 			# Compute the rear wheel odometry
 			wheel_odom_rear.twist.twist.linear.x = (wheel_rl_vel + wheel_rr_vel) * self.wheel_radius / 2
-			wheel_odom_rear.twist.twist.angular.z = (wheel_rl_vel - wheel_rr_vel) * self.wheel_radius / self.rear_wheel_separation
+			wheel_odom_rear.twist.twist.angular.z = -(wheel_rl_vel - wheel_rr_vel) * self.wheel_radius / self.rear_wheel_separation
 
-			Covariance = [1e-2, 0, 0, 0, 0, 0,
+			Covariance = np.array([1e-2, 0, 0, 0, 0, 0,
 							0, 1e-2, 0, 0, 0, 0,
 							0, 0, 1e3, 0, 0, 0,
 							0, 0, 0, 1e3, 0, 0,
 							0, 0, 0, 0, 1e3, 0,
-							0, 0, 0, 0, 0, 1e-2]
+							0, 0, 0, 0, 0, 1e-2])
 							# Covariance of x, y, z, roll, pitch, yaw (in that order)
 							# The covariance of the velocity is set to 1e-2 for x and y, and 1e3 for yaw
 							# This is because the wheels per definition do not move in the y direction.
