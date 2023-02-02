@@ -35,7 +35,7 @@ class WheelOdometry(Node):
 		self.subscription = self.create_subscription(JointState, self.joint_state_topic, self.joint_state_callback, 10)
 
 		# Create publisher for wheel odometry
-		self.publisher = self.create_publisher(Twist, self.wheel_odom_topic, 10)
+		self.publisher = self.create_publisher(TwistWithCovarianceStamped, self.wheel_odom_topic, 10)
 
 		
 	def joint_state_callback(self, msg):
