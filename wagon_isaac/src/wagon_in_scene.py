@@ -5,16 +5,30 @@ import sys
 #from asyncio.timeouts import timeout
 
 from omni.isaac.kit import SimulationApp
+
+FPS_RATE = 1000
+headless_streaming = False
+
 if len(sys.argv) > 1 :
-    if str(sys.argv[0]) == "stream" or "Stream" or "True" or "yes":
+    if "stream" in sys.argv:
         headless_streaming = True
         print("Starting isaac sim in headless with streaming")
+
     else:
         print("invalid arguments parsed, use:")
         print("stream, true or yes")
         print("to start in headless mode with streaming")
-else:
-    headless_streaming = False
+
+    # Check if any string in entire list argv is FPS
+    if "FPS" in sys.argv or "fps" in sys.argv:      # Is actually step pr second, not frame pr second...
+        # get index of FPS in list
+        index = sys.argv.index("FPS") if "FPS" in sys.argv else sys.argv.index("fps")
+        # get FPS value
+        FPS_RATE = int(sys.argv[index + 1]) if int(sys.argv[index + 1]) else FPS_RATE
+        print("FPS set to: ", FPS_RATE)
+    else:
+        print("FPS not specified, using default value of 1000")
+    
 
 simulation_app = SimulationApp({"headless": headless_streaming})  # we can also run as headless.     
 # ! MUST BE DONE BEFORE IMPORTING ANYTHING ELSE !
@@ -25,19 +39,20 @@ simulation_app = SimulationApp({"headless": headless_streaming})  # we can also 
 from omni.isaac.core import World
 from omni.isaac.wheeled_robots.robots import WheeledRobot
 import omni.kit.commands
-from omni.isaac.core.utils import stage, extensions, nucleus, prims, xforms
+from omni.isaac.core.utils import stage
 from omni.isaac.core.prims import XFormPrim
 import omni.kit.app
 from omni.usd import get_context
 
 #from pxr import UsdLux, Sdf, Gf, UsdPhysics, PhysicsSchemaTools
-from pxr import Sdf, Gf, UsdPhysics, UsdLux, PhysxSchema, UsdGeom
+from pxr import Sdf, UsdLux
 from omni.isaac.core.utils.types import ArticulationAction
-from omni.isaac.isaac_sensor import _isaac_sensor
-
+from omni.isaac.articulation_inspector import *
 
 from omni.isaac.core.utils.extensions import enable_extension
 enable_extension("omni.isaac.ros2_bridge")
+enable_extension("omni.isaac.articulation_inspector")
+
 
 if headless_streaming:
     # Default Livestream settings
@@ -52,6 +67,7 @@ if headless_streaming:
     enable_extension("omni.kit.livestream.native")
 
 
+
 import rclpy
 from rclpy.node import Node
 from geometry_msgs.msg import Twist
@@ -60,7 +76,6 @@ from geometry_msgs.msg import Twist
 import numpy as np
 import time
 import os
-import carb
 
 from include.Sensors.rtx_lidar import lidar_3d
 from include.Sensors.imu import IMU
@@ -84,17 +99,24 @@ class IsaacSim(Node):
 
         #self.world.scene.add_default_ground_plane()
         #self.world.reset()
-        #self.import_wagon()
+
         self.stage = omni.usd.get_context().get_stage()
 
         self.set_physics()
 
-        self.import_from_urdf()
-        self.import_usd()
+        self.import_usd() # Import the wagon usd file 
         self.world.reset()
+        self.import_from_urdf()
+
+
         print( "This robot valid innit:" ,self.robot.is_valid())
+        self.setup_ros_subscribers()
 
         self.i = 0
+   
+
+    def setup_ros_subscribers(self):
+
         self.twist_sub = self.create_subscription(
             Twist,
             'direct_cmd_vel',
@@ -109,39 +131,23 @@ class IsaacSim(Node):
             self.joint_state_controller_callback,
             1)
         print("Subscribed to joint_states_controller")
-            
-        
+        self.joint_state_sub  # prevent unused variable warning
 
 
     def set_physics(self):
-
-
-        # scene = UsdPhysics.Scene.Define(self.stage, Sdf.Path("/physicsScene"))
-        # # Set gravity
-        # scene.CreateGravityDirectionAttr().Set(Gf.Vec3f(0.0, 0.0, -1.0))
-        # scene.CreateGravityMagnitudeAttr().Set(9.81)
-        # # Set solver settings
-        # PhysxSchema.PhysxSceneAPI.Apply(self.stage.GetPrimAtPath("/physicsScene"))
-        # physxSceneAPI = PhysxSchema.PhysxSceneAPI.Get(self.stage, "/physicsScene")
-        # physxSceneAPI.CreateEnableCCDAttr(True)
-        # physxSceneAPI.CreateEnableStabilizationAttr(True)
-        # physxSceneAPI.CreateEnableGPUDynamicsAttr(False)
-        # physxSceneAPI.CreateBroadphaseTypeAttr("MBP")
-        # physxSceneAPI.CreateSolverTypeAttr("TGS")
 
         # Add lighting
         distantLight = UsdLux.DistantLight.Define(self.stage, Sdf.Path("/DistantLight"))
         distantLight.CreateIntensityAttr(500)
 
 
-
-
     def cmd_vel_callback(self, msg):
-        #print("Callback")
-        #print("Callback heard", msg)
+
         #self.get_logger().info('I heard: "%s"' % msg)
-        self.robot.apply_action(
-            ArticulationAction(joint_velocities=[msg.linear.x, msg.linear.x, msg.linear.x, msg.linear.x], joint_indices=[2,3,4,5])
+
+        self.robot.apply_wheel_actions(
+            ArticulationAction(joint_positions=None, joint_efforts=None, 
+                joint_velocities=[msg.linear.x, msg.linear.x, msg.linear.x, msg.linear.x], joint_indices=[2,3,4,5])
         )
         self.robot.apply_action(
             ArticulationAction(joint_positions=[msg.angular.z], joint_indices=[1])
@@ -149,12 +155,16 @@ class IsaacSim(Node):
         
 
     def import_usd(self):
-        path = "/home/danitech/isaac_ws/environments/grass_terrain.usd"
+        #path = "/home/danitech/isaac_ws/environments/USD/grass_terrain.usd"
+        path = "/home/danitech/isaac_ws/environments/USD/Quarray_en_cantera.usd"
+        #path = "/home/danitech/master_ws/src/Danitech-master/wagon_isaac/usd/environments/warehouse.usd"    
+        
         prim_path="/World"
-        stage.add_reference_to_stage(usd_path=path, prim_path=prim_path)
+        prim_stage = stage.add_reference_to_stage(usd_path=path, prim_path=prim_path)
         prim = XFormPrim(
             prim_path=prim_path, name="grass",
-            position=np.array([0, 0, 1.5]),
+            position=np.array([0, 23, -87]), # Position for wagon in center of scene
+            #position=np.array([0, 0, 0]),
             #orientation=np.array([-0.7071068, 0, 0, 0.7071068])
         )
         self.world.scene.add(prim)
@@ -163,7 +173,7 @@ class IsaacSim(Node):
 
     def joint_state_controller_callback(self, msg):
         #print("Callback")
-        #self.get_logger().info('I heard: "%s"' % msg)
+        self.get_logger().info('I heard on joint controller: "%s"' % msg)
         wheel_joint_indices = [msg.name.index("wheel_front_left_joint"), msg.name.index("wheel_front_right_joint"), msg.name.index("wheel_rear_left_joint"), msg.name.index("wheel_rear_right_joint")]
         wheel_velocities = [msg.velocity[wheel_joint_indices[0]], msg.velocity[wheel_joint_indices[1]], msg.velocity[wheel_joint_indices[2]], msg.velocity[wheel_joint_indices[3]]]
         self.robot.apply_action(
@@ -182,9 +192,6 @@ class IsaacSim(Node):
             print("  ", msg.name[i], ":", msg.position[i], ":", msg.velocity[i])
 
 
-
-
-
     def import_from_urdf(self):
         # setting up import configuration: https://docs.omniverse.nvidia.com/py/isaacsim/source/extensions/omni.isaac.urdf/docs/index.html#omni.isaac.urdf._urdf.ImportConfig
         status, import_config = omni.kit.commands.execute("URDFCreateImportConfig")
@@ -192,7 +199,7 @@ class IsaacSim(Node):
         import_config.set_convex_decomp(False)
         import_config.set_import_inertia_tensor(True)
         import_config.set_fix_base(False)
-        import_config.set_default_drive_type(1) # velocity 
+        import_config.set_default_drive_type(2) # 2 for velocity 
         import_config.set_default_drive_strength(2000.00)
         import_config.set_default_position_drive_damping(100.00)
 
@@ -204,11 +211,12 @@ class IsaacSim(Node):
         )
         # import USD
 
-        # self.controller = add_reference_to_stage(usd_path="/home/danitech/isaac_ws/Controllers/wagon_controller_keyboard.usd", prim_path="/World/ControllerGraph", prim_type="Xform")
+        self.wagon_prim_path = "/wagon"
 
-        self.world.scene.add(
+        self.robot = self.world.scene.add(
             WheeledRobot(
-                prim_path="/wagon",
+                prim_path=self.wagon_prim_path,
+                position=np.array([0, 0, 0]),
                 name="wagon",
                 wheel_dof_names=["wheel_front_right_joint", "wheel_front_left_joint", "wheel_rear_right_joint", "wheel_rear_left_joint"],
                 wheel_dof_indices=[2,3,4,5],
@@ -216,17 +224,16 @@ class IsaacSim(Node):
             )
         )
 
-        #prim = define_prim("/World/Controller", "ComputeGraph")
-        #prim.GetReferences().AddReference("/home/danitech/Documents/WagonController.usd")
-        
-        self.robot = self.world.scene.get_object("wagon")
+        self.world.step()
+        self.robot.initialize()
 
     
     def set_params(self):
         # Set the parameters of the hydraulic joint
         stage = get_context().get_stage()
-        prim_path ="/wagon/connection_link/hydraulic_joint"
+        prim_path = self.wagon_prim_path + "/connection_link/hydraulic_joint"
         prim=stage.GetPrimAtPath(prim_path)
+        print("Prim: ", prim)
         hydraulic_s = prim.GetAttribute("drive:angular:physics:stiffness")
         hydraulic_d = prim.GetAttribute("drive:angular:physics:damping")
         hydraulic_force = prim.GetAttribute("drive:angular:physics:maxForce")
@@ -239,22 +246,12 @@ class IsaacSim(Node):
         print("Max Force: ", hydraulic_force.Get())
 
         # Set the parameters of the connection joint
-        prim_path ="/wagon/base_link/connection_joint"
+        prim_path = self.wagon_prim_path + "/base_link/connection_joint"
         prim=stage.GetPrimAtPath(prim_path)
         connection_s = prim.GetAttribute("drive:angular:physics:stiffness")
         connection_d = prim.GetAttribute("drive:angular:physics:damping")
         connection_s.Set(200.00)
         connection_d.Set(10.00)
-
-    def move_robot(self):
-
-        self.robot.apply_action(
-            ArticulationAction(joint_velocities=[1, 1, 1, 1], joint_indices=[2,3,4,5])
-        )
-        self.robot.apply_action(
-            ArticulationAction(joint_positions=[0.4], joint_indices=[1])
-        )
-
 
     def pause_world(self):
         self.timeline.pause()
@@ -271,75 +268,59 @@ class IsaacSim(Node):
 def main():
     rclpy.init()
     isaac_sim = IsaacSim()
-    # Print info about the jetbot after the first reset is called
-    #print("Num of degrees of freedom after first reset: " + str(_jetbot.num_dof)) # prints 2
-    #print("Joint Positions after first reset: " + str(_jetbot.get_joint_positions()))
-    # Step the simulation in a loop running real time for 500 steps
-    
 
     for i in range(10):
         isaac_sim.step()
 
-
-
     isaac_sim.set_params()
 
     #lidar = lidar_3d("/lidar", "/wagon/base_scan", "Example_Rotary")
-    lidar_sim = lidar("/lidar", "/wagon/base_scan")
+    lidar_sim = lidar("/lidar", isaac_sim.wagon_prim_path + "/base_scan")
     time.sleep(1)
-    print("Crash after lidar")
 
-    imu = IMU("/wagon/base_scan", False, "sensor")
+    imu = IMU( isaac_sim.wagon_prim_path + "/base_scan", False, "sensor")
     simulation_app.update()
-    simulation_app.update()
-    print("Crash after reset")
 
     last_spin = time.time()
-    # lidarInterface = _range_sensor.acquire_lidar_sensor_interface() # Used to interact with the LIDAR
+    time_now = time.time()
+
     joint_states = joint_state_pub("wagon")
-    gps_module = gps_pub("/wagon/rtk_pole")
+    gps_module = gps_pub( isaac_sim.wagon_prim_path + "/rtk_pole")
     i = 0
-    #imu = _isaac_sensor.acquire_imu_sensor_interface()
-    
+
     isaac_sim.play_world()
+
+    # isaac_sim.pause_world()
+
     while True:
-        if True:
-        #if time.time() - last_spin > 1/60:
+        #if True:
+        if time.time() - last_spin > 1/FPS_RATE: # 60 Hz
             last_spin = time.time()
             isaac_sim.step()
             rclpy.spin_once(isaac_sim, timeout_sec=0.005)
             imu.ros_pub()
-            #time_now = time.time()
+
             lidar_sim.ros_pub()
+
             #print("time: ", time.time() - time_now)
-            
             
             #if i > 300:
             if i % 15 == 0:
                 gps_module.pub_gps_data()
                 joint_states.joint_state_callback()
 
-            
-
-
-            i+=1
-        
-
-            # if i == 50:
-            #     _imu_sensor = _isaac_sensor.acquire_imu_sensor_interface()
-            #     imu = True
-
             if i % 600 == 0:
 
                 print("Heartbeat: ", i/60)
                 #Print current physics time
                 #print("Physics t: ", isaac_sim.world.current_time)
-                #print(_imu_sensor.is_imu_sensor("wagon/base_scan/sensor"))
-                #sensor_reading = imu.get_sensor_readings("/wagon/base_scan/sensor")
-                #print("Imu data: ", sensor_reading)
-                
                 #Print many seconds pr second (should be close to 1)
-                print("seconds pr second: ", 1/((time.time()-last_spin) * 60))
+                print("seconds pr second: ", 1/((time.time()-time_now) * 60))
+
+            time_now = time.time()
+
+            i+=1
+
 
 
 

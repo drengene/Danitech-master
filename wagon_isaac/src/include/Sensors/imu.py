@@ -10,7 +10,7 @@ import omni
 import asyncio
 
 from omni.isaac.core.utils import stage, extensions
-from omni.isaac.isaac_sensor import _isaac_sensor
+from omni.isaac.sensor import _sensor
 from omni.kit.commands import execute
 
 from pxr import Gf
@@ -33,11 +33,15 @@ class IMU(Node):
         super().__init__('imu_publisher',namespace=imu_parent)
 
         #imu_path = imu_parent + "/" + name
-        self.imu_parent = "/wagon/base_scan"
+        if imu_parent is None:
+            self.imu_parent = "/wagon/base_scan"
+        else:
+            self.imu_parent = imu_parent
+            
         self.imu_name = name
         self.imu_path = self.imu_parent + "/" + self.imu_name
 
-        self.imu_sensor = _isaac_sensor.acquire_imu_sensor_interface()
+        self.imu_sensor = _sensor.acquire_imu_sensor_interface()
 
         asyncio.ensure_future(self.create_scenario())
 
