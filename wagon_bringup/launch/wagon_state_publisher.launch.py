@@ -10,7 +10,7 @@ from launch_ros.parameter_descriptions import ParameterValue
 
 def generate_launch_description():
     wagon_description_path = get_package_share_directory('wagon_description')
-    default_model_path = os.path.join(wagon_description_path , 'urdf', 'wagon.urdf')
+    default_model_path = os.path.join(wagon_description_path , 'urdf', 'wagon.xacro')
     print(default_model_path)
     default_rviz_config_path = os.path.join(wagon_description_path, 'rviz' , 'wagon_model.rviz')
 

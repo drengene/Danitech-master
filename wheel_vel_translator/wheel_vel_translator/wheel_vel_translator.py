@@ -19,7 +19,7 @@ class WheelVelTranslator(Node):
         self.declare_parameter('rear_base_radius', 0.8716-0.085, ParameterDescriptor(description="Length from articulated joint to rear wheel axel"))
 
         # Declare topic parameters
-        self.declare_parameter('cmd_vel_topic', '/mouse_vel', ParameterDescriptor(description="Topic for receiving velocity commands"))
+        self.declare_parameter('cmd_vel_topic', '/cmd_vel', ParameterDescriptor(description="Topic for receiving velocity commands"))
         self.declare_parameter('joint_state_topic', '/joint_states', ParameterDescriptor(description="Topic for receiving joint states"))
         self.declare_parameter('joint_state_control_topic', '/joint_states_controller', ParameterDescriptor(description="Topic for publishing joint controls"))
 

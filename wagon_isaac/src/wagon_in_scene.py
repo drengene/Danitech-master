@@ -43,10 +43,14 @@ from omni.isaac.core.utils import stage
 from omni.isaac.core.prims import XFormPrim
 import omni.kit.app
 from omni.usd import get_context
+# Import physicsmaterials
+from omni.isaac.core.materials.physics_material import PhysicsMaterial
 
 #from pxr import UsdLux, Sdf, Gf, UsdPhysics, PhysicsSchemaTools
 from pxr import Sdf, UsdLux
 from omni.isaac.core.utils.types import ArticulationAction
+from omni.isaac.core.articulations import ArticulationView
+from omni.isaac.core.prims import GeometryPrimView
 from omni.isaac.articulation_inspector import *
 
 from omni.isaac.core.utils.extensions import enable_extension
@@ -76,6 +80,7 @@ from geometry_msgs.msg import Twist
 import numpy as np
 import time
 import os
+import asyncio
 
 from include.Sensors.rtx_lidar import lidar_3d
 from include.Sensors.imu import IMU
@@ -97,14 +102,14 @@ class IsaacSim(Node):
         self.timeline = omni.timeline.get_timeline_interface()
         self.pause_world()
 
-        #self.world.scene.add_default_ground_plane()
-        #self.world.reset()
+        self.world.scene.add_default_ground_plane()
+        self.world.reset()
 
         self.stage = omni.usd.get_context().get_stage()
 
         self.set_physics()
 
-        self.import_usd() # Import the wagon usd file 
+        #self.import_usd() # Import the world USD 
         self.world.reset()
         self.import_from_urdf()
 
@@ -117,13 +122,13 @@ class IsaacSim(Node):
 
     def setup_ros_subscribers(self):
 
-        self.twist_sub = self.create_subscription(
-            Twist,
-            'direct_cmd_vel',
-            self.cmd_vel_callback,
-            1)
-        print("Subscribed to direct_cmd_vel")
-        self.twist_sub  # prevent unused variable warning
+        # self.twist_sub = self.create_subscription(
+        #     Twist,
+        #     'cmd_vel',
+        #     self.cmd_vel_callback,
+        #     1)
+        # print("Subscribed to cmd_vel")
+        #self.twist_sub  # prevent unused variable warning
 
         self.joint_state_sub = self.create_subscription(
             JointState,
@@ -147,7 +152,7 @@ class IsaacSim(Node):
 
         self.robot.apply_wheel_actions(
             ArticulationAction(joint_positions=None, joint_efforts=None, 
-                joint_velocities=[msg.linear.x, msg.linear.x, msg.linear.x, msg.linear.x], joint_indices=[2,3,4,5])
+                joint_velocities=[0,0, msg.linear.x, 0], joint_indices=[2,3,4,5])
         )
         self.robot.apply_action(
             ArticulationAction(joint_positions=[msg.angular.z], joint_indices=[1])
@@ -156,15 +161,15 @@ class IsaacSim(Node):
 
     def import_usd(self):
         #path = "/home/danitech/isaac_ws/environments/USD/grass_terrain.usd"
-        path = "/home/danitech/isaac_ws/environments/USD/Quarray_en_cantera.usd"
-        #path = "/home/danitech/master_ws/src/Danitech-master/wagon_isaac/usd/environments/warehouse.usd"    
+        #path = "/home/danitech/isaac_ws/environments/USD/Quarray_en_cantera.usd"
+        path = "/home/danitech/master_ws/src/Danitech-master/wagon_isaac/usd/environments/warehouse.usd"    
         
         prim_path="/World"
         prim_stage = stage.add_reference_to_stage(usd_path=path, prim_path=prim_path)
         prim = XFormPrim(
             prim_path=prim_path, name="grass",
-            position=np.array([0, 23, -87]), # Position for wagon in center of scene
-            #position=np.array([0, 0, 0]),
+            #position=np.array([0, 23, -87]), # Position for wagon in center of scene
+            position=np.array([0, 0, 0]),
             #orientation=np.array([-0.7071068, 0, 0, 0.7071068])
         )
         self.world.scene.add(prim)
@@ -173,7 +178,7 @@ class IsaacSim(Node):
 
     def joint_state_controller_callback(self, msg):
         #print("Callback")
-        self.get_logger().info('I heard on joint controller: "%s"' % msg)
+        #self.get_logger().info('I heard on joint controller: "%s"' % msg)
         wheel_joint_indices = [msg.name.index("wheel_front_left_joint"), msg.name.index("wheel_front_right_joint"), msg.name.index("wheel_rear_left_joint"), msg.name.index("wheel_rear_right_joint")]
         wheel_velocities = [msg.velocity[wheel_joint_indices[0]], msg.velocity[wheel_joint_indices[1]], msg.velocity[wheel_joint_indices[2]], msg.velocity[wheel_joint_indices[3]]]
         self.robot.apply_action(
@@ -187,9 +192,9 @@ class IsaacSim(Node):
         )
 
         # Print with nice formatting
-        print("Joint States:")
-        for i in range(len(msg.name)):
-            print("  ", msg.name[i], ":", msg.position[i], ":", msg.velocity[i])
+        # print("Joint States:")
+        # for i in range(len(msg.name)):
+        #     print("  ", msg.name[i], ":", msg.position[i], ":", msg.velocity[i])
 
 
     def import_from_urdf(self):
@@ -200,8 +205,8 @@ class IsaacSim(Node):
         import_config.set_import_inertia_tensor(True)
         import_config.set_fix_base(False)
         import_config.set_default_drive_type(2) # 2 for velocity 
-        import_config.set_default_drive_strength(2000.00)
-        import_config.set_default_position_drive_damping(100.00)
+        import_config.set_default_drive_strength(100.00)
+        import_config.set_default_position_drive_damping(15000.00)
 
         # import URDF
         omni.kit.commands.execute(
@@ -218,14 +223,40 @@ class IsaacSim(Node):
                 prim_path=self.wagon_prim_path,
                 position=np.array([0, 0, 0]),
                 name="wagon",
-                wheel_dof_names=["wheel_front_right_joint", "wheel_front_left_joint", "wheel_rear_right_joint", "wheel_rear_left_joint"],
-                wheel_dof_indices=[2,3,4,5],
+                wheel_dof_names=["wheel_front_left_joint", "wheel_front_right_joint", "wheel_rear_left_joint", "wheel_rear_right_joint"],
+                wheel_dof_indices=[3,2,5,4],
                 create_robot=True,
             )
         )
 
+        # Create physics material for robot wheels
+        wheel_material = PhysicsMaterial(
+            name="wheel_material",
+            static_friction=2,
+            dynamic_friction=1.5,
+            restitution=0.1,
+            prim_path= self.wagon_prim_path + "/wheels_material"
+        )
+        #self.world.scene.add(wheel_material)
+
+        self.wheel_prim_view = GeometryPrimView(self.wagon_prim_path + "/wheel.*link/collisions")
+
+        print("GEom prim paths; ", self.wheel_prim_view.prim_paths)
+        self.wheel_prim_view.apply_physics_materials(wheel_material)
+
+        # Assign material to robot wheels
+        
+
         self.world.step()
         self.robot.initialize()
+
+        self.robot_view = ArticulationView(prim_paths_expr=self.wagon_prim_path, name="wagon_view")
+        self.world.scene.add(self.robot_view)
+        self.robot_view.initialize()
+        self.world.reset_async()
+
+
+
 
     
     def set_params(self):
@@ -239,7 +270,10 @@ class IsaacSim(Node):
         hydraulic_force = prim.GetAttribute("drive:angular:physics:maxForce")
         hydraulic_s.Set(1000.00)
         hydraulic_d.Set(150.00)
-        hydraulic_force.Set(5000.0)
+        hydraulic_force.Set(500.0)
+        #print("max efforts hydrolic:", self.robot_view.get_max_efforts(joint_indices=[1]))
+        #self.robot_view.set_max_efforts([500.0], joint_indices=[1])
+        #print("max efforts hydrolic:", self.robot_view.get_max_efforts(joint_indices=[1]))
 
         print("Stiffness: ", hydraulic_s.Get())
         print("Damping: ", hydraulic_d.Get())
@@ -250,8 +284,30 @@ class IsaacSim(Node):
         prim=stage.GetPrimAtPath(prim_path)
         connection_s = prim.GetAttribute("drive:angular:physics:stiffness")
         connection_d = prim.GetAttribute("drive:angular:physics:damping")
-        connection_s.Set(200.00)
+        connection_force = prim.GetAttribute("drive:angular:physics:maxForce")
+        connection_s.Set(0.00)
         connection_d.Set(10.00)
+        connection_force.Set(0.00)
+
+
+        
+        prim_path  = [self.wagon_prim_path + "/rear_link/wheel_rear_left_joint", self.wagon_prim_path + "/rear_link/wheel_rear_right_joint",
+             self.wagon_prim_path + "/base_link/wheel_front_left_joint", self.wagon_prim_path + "/base_link/wheel_front_right_joint"]
+        for prim in prim_path:
+            prim=stage.GetPrimAtPath(prim)
+            wheel_s = prim.GetAttribute("drive:angular:physics:stiffness")
+            wheel_d = prim.GetAttribute("drive:angular:physics:damping")
+            wheel_f = prim.GetAttribute("drive:angular:physics:maxForce")
+            wheel_armature = prim.GetAttribute("physxJoint:armature")
+            wheel_s.Set(0.00)
+            wheel_d.Set(150.00)
+            wheel_f.Set(5000.00)
+            wheel_armature.Set(4000.00)
+
+        print("Armatures: ", self.robot_view.get_armatures(joint_indices=[2,3,4,5]))
+        #self.robot_view.set_friction_coefficients([2000.0, 2000.0, 2000.0, 2000.0], indices=)
+        print("friction: ", self.robot_view.get_friction_coefficients(joint_indices=[2,3,4,5]))
+
 
     def pause_world(self):
         self.timeline.pause()
@@ -307,7 +363,7 @@ def main():
             #if i > 300:
             if i % 15 == 0:
                 gps_module.pub_gps_data()
-                joint_states.joint_state_callback()
+                joint_states.pub()
 
             if i % 600 == 0:
 

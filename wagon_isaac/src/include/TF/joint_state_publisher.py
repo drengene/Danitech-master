@@ -34,7 +34,7 @@ class joint_state_pub(Node):
                 self.get_joints(child) # Recursively get all joints in the scene
 
         
-    def joint_state_callback(self):
+    def pub(self):
         self.get_joint_states()
         joint_msg = JointState()
         sim_time = self.sim_context.current_time
