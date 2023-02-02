@@ -3,7 +3,7 @@ import rclpy
 from rclpy.node import Node
 from sensor_msgs.msg import JointState
 #Import twist
-from geometry_msgs.msg import Twist
+from geometry_msgs.msg import TwistWithCovarianceStamped
 
 class WheelOdometry(Node):
 	def __init__(self):
@@ -37,29 +37,6 @@ class WheelOdometry(Node):
 		# Create publisher for wheel odometry
 		self.publisher = self.create_publisher(Twist, self.wheel_odom_topic, 10)
 
-
-
-
-		# # Old shit
-		# self.publisher_ = self.create_publisher(Twist, 'wheel_odom', 10)
-		# # Declare parameters related to topic names
-		# self.declare_parameter('joint_state_topic', 'joint_states', 'Joint state topic name')
-		# self.declare_parameter('wheel_odom_topic', 'wheel_odom', 'Wheel odometry topic name')
-		# # Get parameters
-		# self.joint_state_topic = self.get_parameter('joint_state_topic').value
-		# self.wheel_odom_topic = self.get_parameter('wheel_odom_topic').value
-		# # Create subscriber
-		# self.subscription = self.create_subscription(JointState, self.joint_state_topic, self.joint_state_callback, 10)
-		# # Create publisher
-		# self.publisher = self.create_publisher(Twist, self.wheel_odom_topic, 10)
-
-		# self.config_index = False
-		# self.wheel_fl = None
-		# self.wheel_fr = None
-		# self.wheel_rl = None
-		# self.wheel_rr = None
-		# self.hydraulic_joint = None
-
 		
 	def joint_state_callback(self, msg):
 		# Get the wheel velocities
@@ -74,12 +51,38 @@ class WheelOdometry(Node):
 			# Get the hydraulic joint position
 			hydraulic_joint_pos = msg.position[self.hydraulic_joint]
 			# Compute the wheel odometry
-			wheel_odom = Twist()
-			#
-			pass
+			wheel_odom_front = TwistWithCovarianceStamped()
+			wheel_odom_front.header = msg.header
+			wheel_odom_front.header.frame_id = 'base_link'
+
+			wheel_odom_rear = TwistWithCovarianceStamped()
+			wheel_odom_rear.header = msg.header
+			wheel_odom_rear.header.frame_id = 'rear_link'
+
+			# Compute the front wheel odometry
+			wheel_odom_front.twist.twist.linear.x = (wheel_fl_vel + wheel_fr_vel) * self.wheel_radius / 2
+			wheel_odom_front.twist.twist.angular.z = (wheel_fl_vel - wheel_fr_vel) * self.wheel_radius / self.front_wheel_separation
+
+			# Compute the rear wheel odometry
+			wheel_odom_rear.twist.twist.linear.x = (wheel_rl_vel + wheel_rr_vel) * self.wheel_radius / 2
+			wheel_odom_rear.twist.twist.angular.z = (wheel_rl_vel - wheel_rr_vel) * self.wheel_radius / self.rear_wheel_separation
+
+			Covariance = [1e-2, 0, 0, 0, 0, 0,
+							0, 1e-2, 0, 0, 0, 0,
+							0, 0, 1e3, 0, 0, 0,
+							0, 0, 0, 1e3, 0, 0,
+							0, 0, 0, 0, 1e3, 0,
+							0, 0, 0, 0, 0, 1e-2]
+							# Covariance of x, y, z, roll, pitch, yaw (in that order)
+							# The covariance of the velocity is set to 1e-2 for x and y, and 1e3 for yaw
+							# This is because the wheels per definition do not move in the y direction.
+
+			wheel_odom_front.twist.covariance = Covariance
+			wheel_odom_rear.twist.covariance = Covariance
 
 			# Publish the wheel odometry
-			self.publisher.publish(wheel_odom)
+			self.publisher.publish(wheel_odom_front)
+			self.publisher.publish(wheel_odom_rear)
 
 		
 	def configure_index(self, msg):
@@ -97,7 +100,11 @@ class WheelOdometry(Node):
 				self.get_logger().info('Configuration not initialized')
 
 def main():
-	pass
+	rclpy.init()
+	wheel_odom_node = WheelOdometry()
+	rclpy.spin(wheel_odom_node)
+	wheel_odom_node.destroy_node()
+	rclpy.shutdown()
 
 
 if __name__ == '__main__':
