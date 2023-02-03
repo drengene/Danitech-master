@@ -89,6 +89,7 @@ from include.TF.joint_state_publisher import joint_state_pub
 from include.Sensors.gps import gps_pub
 from sensor_msgs.msg import JointState
 from geometry_msgs.msg import PoseWithCovarianceStamped
+from rosgraph_msgs.msg import Clock
 # To run file in terminal, use:
 # ~/.local/share/ov/pkg/isaac_sim-2022.1.1/python.sh wagon_in_scene.py
 
@@ -149,6 +150,22 @@ class IsaacSim(Node):
         init_pose.header.frame_id = "odom"
         self.position_reset_pub.publish(init_pose)
         print("Publishing to initialpose")
+
+        # Publish simulation time
+        self.sim_time_pub = self.create_publisher(
+            Clock,
+            'clock',
+            1)
+        print("Publishing to clock")
+
+    
+    def pub_sim_time(self):
+        # Get current simulation time
+        sim_time = self.world.current_time()
+        sim_time_msg = Clock()
+        sim_time_msg.clock.sec = int(sim_time)
+        sim_time_msg.clock.nanosec = int((sim_time - int(sim_time)) * 1e9)
+        self.sim_time_pub.publish(sim_time_msg)
 
 
 
@@ -366,8 +383,10 @@ def main():
     while True:
         #if True:
         if time.time() - last_spin > 1/FPS_RATE: # 60 Hz
+
             last_spin = time.time()
             isaac_sim.step()
+            isaac_sim.pub_sim_time()
             rclpy.spin_once(isaac_sim, timeout_sec=0.005)
             
             imu_scan.ros_pub()
