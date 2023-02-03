@@ -4,9 +4,10 @@
   <xacro:property name="height" value="0.294" />
   <xacro:property name="hydraulic_offset" value="0.085" />
   <xacro:property name="rear_link_offset" value="-0.8716" />
+  <xacro:property name="base_link_offset" value="0.6948" />
 
 
-
+<!-- 
   <link name="base_footprint">
   </link>
 
@@ -14,7 +15,7 @@
     <parent link="base_footprint"/>
     <child link="base_link"/>
     <origin xyz="0.6948 0 0" rpy="0 0 0"/>
-  </joint>
+  </joint> -->
 
   <link name="base_link">
     <visual>
@@ -26,7 +27,7 @@
     </visual>
 
     <collision>
-      <origin xyz="-${0.6948-(1.055/2)+0.02} 0 0" rpy="0 0 0"/>
+      <origin xyz="-${base_link_offset-(1.055/2)+0.02} 0 0" rpy="0 0 0"/>
       <geometry>
         <box size="1.055 0.620 0.260"/>
       </geometry>
@@ -34,7 +35,7 @@
 
     <inertial>
       <origin xyz="-0.142 0 0" rpy="0 ${pi/2} 0" />
-      <mass value="135.5" />
+      <mass value="185.5" />
       <inertia ixx="6.189"
                ixy="0" iyy="17.997"
                ixz="-0.009" iyz="0" izz="21.229" />
@@ -96,7 +97,7 @@
 
     <inertial>
         <origin xyz="${0.142} 0 0" rpy="0 0 0" />
-        <mass value="140.5" />
+        <mass value="190.5" />
       <inertia ixx="6.189"
                ixy="0" iyy="17.997"
                ixz="-0.009" iyz="0" izz="21.229" />
@@ -250,7 +251,7 @@
 
 
   <joint name="imu_joint" type="fixed">
-    <parent link="base_link"/>
+    <parent link="rear_link"/>
     <child link="imu_link"/>
     <origin xyz="-0.032 0 0.068" rpy="0 0 0"/>
   </joint>

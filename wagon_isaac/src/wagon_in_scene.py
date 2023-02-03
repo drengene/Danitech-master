@@ -347,7 +347,9 @@ def main():
     lidar_sim = lidar("/lidar", isaac_sim.wagon_prim_path + "/base_scan")
     time.sleep(1)
 
-    imu = IMU( isaac_sim.wagon_prim_path + "/base_scan", False, "sensor")
+    imu_scan = IMU( isaac_sim.wagon_prim_path + "/base_scan", False, "base_scan_imu")
+    imu_rear =  IMU( isaac_sim.wagon_prim_path + "/imu_link", True, "rear_imu")
+
     simulation_app.update()
 
     last_spin = time.time()
@@ -367,7 +369,9 @@ def main():
             last_spin = time.time()
             isaac_sim.step()
             rclpy.spin_once(isaac_sim, timeout_sec=0.005)
-            imu.ros_pub()
+            
+            imu_scan.ros_pub()
+            imu_rear.ros_pub()
 
 
             #print("time: ", time.time() - time_now)

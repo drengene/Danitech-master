@@ -38,13 +38,15 @@
   <material name="acrylic">
     <color rgba="0.9 0.9 1.0 0.6"/>
   </material>
+  <!-- 
   <link name="base_footprint">
   </link>
+
   <joint name="base_joint" type="fixed">
     <parent link="base_footprint"/>
     <child link="base_link"/>
-    <origin rpy="0 0 0" xyz="0.6948 0 0"/>
-  </joint>
+    <origin xyz="0.6948 0 0" rpy="0 0 0"/>
+  </joint> -->
   <link name="base_link">
     <visual>
       <origin rpy="0 0 1.57" xyz="0 0 0"/>
@@ -61,7 +63,7 @@
     </collision>
     <inertial>
       <origin rpy="0 1.5707963267948966 0" xyz="-0.142 0 0"/>
-      <mass value="135.5"/>
+      <mass value="185.5"/>
       <inertia ixx="6.189" ixy="0" ixz="-0.009" iyy="17.997" iyz="0" izz="21.229"/>
     </inertial>
   </link>
@@ -107,7 +109,7 @@
     </collision>
     <inertial>
       <origin rpy="0 0 0" xyz="0.142 0 0"/>
-      <mass value="140.5"/>
+      <mass value="190.5"/>
       <inertia ixx="6.189" ixy="0" ixz="-0.009" iyy="17.997" iyz="0" izz="21.229"/>
     </inertial>
   </link>
@@ -231,7 +233,7 @@
     </inertial>
   </link>
   <joint name="imu_joint" type="fixed">
-    <parent link="base_link"/>
+    <parent link="rear_link"/>
     <child link="imu_link"/>
     <origin rpy="0 0 0" xyz="-0.032 0 0.068"/>
   </joint>
