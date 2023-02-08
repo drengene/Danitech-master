@@ -1,0 +1,14 @@
+# - Config file for the pointcloud_filters package
+# It defines the following variables
+#  pointcloud_filters_INCLUDE_DIRS - include directories for FooBar
+#  pointcloud_filters_LIBRARIES    - libraries to link against
+#  pointcloud_filters_EXECUTABLE   - the bar executable
+
+set(pointcloud_filters_INCLUDE_DIRS "@CONF_INCLUDE_DIRS@")
+
+# Our library dependencies (contains definitions for IMPORTED targets)
+include("${pointcloud_filters_DIR}/export_pointcloud_filters.cmake")
+
+# These are IMPORTED targets created by pointcloud_filtersTargets.cmake
+
+
