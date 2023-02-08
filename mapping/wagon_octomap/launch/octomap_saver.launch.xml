@@ -1,0 +1,14 @@
+<!--
+  Example launch file for octomap_server mapping:
+  Listens to incoming PointCloud2 data and incrementally builds an octomap.
+  The data is sent out in different representations.
+
+  Copy this file into your workspace and adjust as needed, see
+  www.ros.org/wiki/octomap_server for details
+-->
+<launch>
+	<node pkg="octomap_server" exec="octomap_saver_node" name="octomap_saver">
+		<param name="octomap_path" value="/home/danitech/master_ws/src/Danitech-master/mapping/wagon_octomap/maps/testmap.bt" />
+
+	</node>
+</launch>
