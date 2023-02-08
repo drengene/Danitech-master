@@ -29,15 +29,12 @@ extensions.enable_extension("omni.isaac.isaac_sensor")
 
 
 class IMU(Node):
-    def __init__(self, imu_parent="/wagon/base_scan", visualize=False, name="imu_sensor", frame_id="base_scan"):
-        super().__init__('imu_publisher',namespace=imu_parent)
+    def __init__(self, imu_prim_path="/wagon/base_scan", visualize=False, frame_id="base_scan"):
+        super().__init__('imu_publisher',namespace=imu_prim_path)
 
         #imu_path = imu_parent + "/" + name
 
-        self.imu_parent = imu_parent
-            
-        self.imu_name = name
-        self.imu_path = self.imu_parent + "/" + self.imu_name
+        self.imu_path = imu_prim_path
         self.frame_id = frame_id
         self.imu_sensor = _sensor.acquire_imu_sensor_interface()
 
@@ -56,7 +53,7 @@ class IMU(Node):
 
 
     def ros_pub(self):
-        sensor_reading = self.imu_sensor.get_sensor_readings(self.imu_path)
+        sensor_reading = self.imu_sensor.get_sensor_readings(self.imu_path + "/Imu_Sensor")
 
         
         for reading in sensor_reading:
@@ -90,15 +87,15 @@ class IMU(Node):
 
         result, sensor = execute(
             "IsaacSensorCreateImuSensor",
-            path="/" + self.imu_name,
-            parent=self.imu_parent,
+            parent=self.imu_path,
+
             sensor_period=1 / 500.0,
             translation=Gf.Vec3d(0, 0, 0),
             orientation=Gf.Quatd(1, 0, 0, 0),
             visualize=True,
         )
 
-        print("imu result: ", result)
+        print("Starting imu sensors at: ", self.imu_path, result)
         self._events = omni.usd.get_context().get_stage_event_stream()
         self._stage_event_subscription = self._events.create_subscription_to_pop(
             self._on_stage_event, name="IMU Sensor Sample stage Watch"

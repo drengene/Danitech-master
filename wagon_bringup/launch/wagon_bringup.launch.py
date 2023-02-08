@@ -6,13 +6,17 @@ from launch.substitutions import LaunchConfiguration
 from launch_ros.actions import Node
 from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch.actions import IncludeLaunchDescription
+from launch.conditions import IfCondition, UnlessCondition
 
 
 def generate_launch_description():
 
+    print("Launching from file: " + __file__)
+
     sensors_launch_pkg = get_package_share_directory('sensors_launch')
 
-    use_sim_time = LaunchConfiguration('use_sim_time', default='true')
+    use_sim_time = LaunchConfiguration('use_sim_time', default= 'true')
+    use_ekf = LaunchConfiguration('use_ekf', default= 'true')
 
     urdf_file_name = 'wagon.urdf'
     urdf = os.path.join(
@@ -27,6 +31,11 @@ def generate_launch_description():
             'use_sim_time',
             default_value='true',
             description='Use simulation (Gazebo) clock if true')
+
+    ekf_arg = DeclareLaunchArgument(
+            'use_ekf',
+            default_value='true',
+            description='Use ekf if true')
 
     state_publisher_node = Node(
             package='robot_state_publisher',
@@ -44,11 +53,12 @@ def generate_launch_description():
             parameters=[{}],
     )
 
-    wheel_odom_launch = IncludeLaunchDescription(
+    ekf_odom_launch = IncludeLaunchDescription(
         PythonLaunchDescriptionSource(
             os.path.join(sensors_launch_pkg, 'launch', 'odom_ekf.launch.py')),
         launch_arguments={
         }.items(),
+        condition=IfCondition(LaunchConfiguration('use_ekf'))
     )
 
 
@@ -57,5 +67,6 @@ def generate_launch_description():
         sim_time_arg,
         state_publisher_node,
         wheel_vel_translator_node,
-        wheel_odom_launch
+        ekf_arg,
+        ekf_odom_launch
         ])

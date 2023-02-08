@@ -250,18 +250,30 @@
   </link>
 
 
-  <joint name="imu_joint" type="fixed">
+  <joint name="rear_imu_joint" type="fixed">
     <parent link="rear_link"/>
-    <child link="imu_link"/>
+    <child link="rear_imu_link"/>
     <origin xyz="-0.032 0 0.068" rpy="0 0 0"/>
   </joint>
 
-  <link name="imu_link"/>
+  <link name="rear_imu_link"/>
+
+
+
+  <joint name="base_scan_imu_joint" type="fixed">
+    <parent link="base_scan"/>
+    <child link="base_scan_imu_link"/>
+    <origin xyz="0.0 0.0 0.0" rpy="0 0 0"/>
+  </joint>
+
+  <link name="base_scan_imu_link"/>
+
+
 
   <joint name="scan_joint" type="fixed">
     <parent link="base_link"/>
     <child link="base_scan"/>
-    <origin xyz="0 0 0.272" rpy="0 0 0"/>
+    <origin xyz="0 0 1.0" rpy="0 0 0"/>
   </joint>
 
   <link name="base_scan">

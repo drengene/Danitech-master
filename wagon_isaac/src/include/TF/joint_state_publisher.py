@@ -40,7 +40,6 @@ class joint_state_pub(Node):
         sim_time = self.sim_context.current_time
         joint_msg.header.stamp.sec = int(sim_time)
         joint_msg.header.stamp.nanosec = int((sim_time - int(sim_time)) * 1e9)
-        joint_msg.header.stamp = self.get_clock().now().to_msg()
         joint_msg.name = self.joint_names
         joint_msg.position = [self.joint_vals[joint][0] for joint in self.joints]
         joint_msg.velocity = [self.joint_vals[joint][1] for joint in self.joints]

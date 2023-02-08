@@ -10,6 +10,9 @@ ekf_filter_node_odom:
     print_diagnostics: true
     debug: false
 
+    reset_on_time_jump: true
+    use_sim_time: true
+
     map_frame: map
     odom_frame: odom
     base_link_frame: base_link
@@ -18,7 +21,7 @@ ekf_filter_node_odom:
     twist0: wheel_odom
     twist0_config: [false, false, false,
                   false, false, false,
-                  true,  true,  false,
+                  true,  true,  true,
                   false, false, true,
                   false, false, false]
     twist0_queue_size: 10
@@ -38,7 +41,7 @@ ekf_filter_node_odom:
     # odom0_differential: false
     # odom0_relative: false
 
-    imu0: wagon/base_scan/imu
+    imu0: wagon/base_scan_imu_link/imu
     imu0_config: [false, false, false,
                   true,  true,  true,
                   false, false, false,
@@ -54,7 +57,7 @@ ekf_filter_node_odom:
     imu0_remove_gravitational_acceleration: true
 
 
-    imu1: wagon/imu_link/imu
+    imu1: wagon/rear_imu_link/imu
     imu1_config: [false, false, false,
                   true,  true,  true,
                   false, false, false,

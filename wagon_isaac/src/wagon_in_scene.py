@@ -104,14 +104,14 @@ class IsaacSim(Node):
         self.timeline = omni.timeline.get_timeline_interface()
         self.pause_world()
 
-        self.world.scene.add_default_ground_plane()
-        self.world.reset()
+        #self.world.scene.add_default_ground_plane()
+        #self.world.reset()
 
         self.stage = omni.usd.get_context().get_stage()
 
         self.set_physics()
 
-        #self.import_usd() # Import the world USD 
+        self.import_usd() # Import the world USD 
         self.world.reset()
         self.import_from_urdf()
 
@@ -147,6 +147,8 @@ class IsaacSim(Node):
 
         # Publish initial pose
         init_pose  = PoseWithCovarianceStamped()
+        init_pose.header.stamp.sec = 1
+        init_pose.header.stamp.nanosec = 1
         init_pose.header.frame_id = "odom"
         self.position_reset_pub.publish(init_pose)
         print("Publishing to initialpose")
@@ -161,7 +163,7 @@ class IsaacSim(Node):
     
     def pub_sim_time(self):
         # Get current simulation time
-        sim_time = self.world.current_time()
+        sim_time = self.world.current_time
         sim_time_msg = Clock()
         sim_time_msg.clock.sec = int(sim_time)
         sim_time_msg.clock.nanosec = int((sim_time - int(sim_time)) * 1e9)
@@ -191,15 +193,18 @@ class IsaacSim(Node):
 
     def import_usd(self):
         #path = "/home/danitech/isaac_ws/environments/USD/grass_terrain.usd"
-        path = "/home/danitech/isaac_ws/environments/USD/Quarray_en_cantera.usd"
+        #path = "/home/danitech/isaac_ws/environments/USD/Quarray_en_cantera.usd"
+        #path = "/home/danitech/isaac_ws/environments/USD/fun_in_a_bun.usd"
+        path = "/home/danitech/isaac_ws/environments/USD/simple_ramp.usd"
+
         #path = "/home/danitech/master_ws/src/Danitech-master/wagon_isaac/usd/environments/warehouse.usd"    
         
         prim_path="/World"
         prim_stage = stage.add_reference_to_stage(usd_path=path, prim_path=prim_path)
         prim = XFormPrim(
             prim_path=prim_path, name="grass",
-            position=np.array([0, 23, -87]), # Position for wagon in center of scene
-            #position=np.array([0, 0, 0]),
+            #position=np.array([0, 23, -87]), # Position for wagon in center of quarry scene
+            position=np.array([0, 0.0, -0.5]),
             #orientation=np.array([-0.7071068, 0, 0, 0.7071068])
         )
         self.world.scene.add(prim)
@@ -364,8 +369,8 @@ def main():
     lidar_sim = lidar("/lidar", isaac_sim.wagon_prim_path + "/base_scan")
     time.sleep(1)
 
-    imu_scan = IMU( isaac_sim.wagon_prim_path + "/base_scan", False, "base_scan_imu")
-    imu_rear =  IMU( isaac_sim.wagon_prim_path + "/imu_link", True, "rear_imu")
+    imu_scan = IMU( isaac_sim.wagon_prim_path + "/base_scan_imu_link", False,  frame_id="base_scan_imu_link")
+    imu_rear =  IMU( isaac_sim.wagon_prim_path + "/rear_imu_link", True,frame_id="rear_imu_link")
 
     simulation_app.update()
 
@@ -378,7 +383,7 @@ def main():
 
     isaac_sim.play_world()
 
-    # isaac_sim.pause_world()
+    #isaac_sim.pause_world()
 
     while True:
         #if True:
@@ -396,10 +401,12 @@ def main():
             #print("time: ", time.time() - time_now)
             
             #if i > 300:
-            if i % 15 == 0:
+            if i % 7 == 0:
                 gps_module.pub_gps_data()
-                joint_states.pub()
                 lidar_sim.ros_pub()
+
+
+            joint_states.pub()
 
 
             if i % 600 == 0:
