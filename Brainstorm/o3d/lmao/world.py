@@ -61,10 +61,9 @@ class World:
 
 		return rays
 
-
-		
-
-
+	def check_unity(rays):
+		directions = rays[:, :, 3:]
+		return np.allclose(np.linalg.norm(directions, axis=2), 1)
 
 
 
