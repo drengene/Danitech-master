@@ -1,7 +1,7 @@
 # Welcome to LMAO - Localization Mapping and Optimization (or Odometry)
 # This is a library that will include the classes and functions needed to perform localization, mapping and optimization in a 3D environment.
 # The library is built on top of Open3D, and uses raycasting in a triangle mesh.
-# It is made by Rasmus Junge, and Daniel Gahner Holm for our Master's Thesis at SDU.
+# It is made by Rasmus Peter Junge, and Daniel Gahner Holm for our Master's Thesis at SDU.
 #
 # The library is divided into the following modules:
 
@@ -9,6 +9,9 @@
 import open3d as o3d
 import numpy as np
 import os
+
+import matplotlib.pyplot as plt
+from mpl_toolkits.mplot3d import Axes3D
 
 class World:
 	def __init__(self, world_file = None):
@@ -22,6 +25,8 @@ class World:
 			self.world = o3d.io.read_triangle_mesh(world_file)
 		else:
 			self.world = o3d.geometry.TriangleMesh()
+
+		self.scene = o3d.t.geometry.RaycastingScene()
 
 	def add_mesh(self, mesh, boolean_operation = "union", tolerance = 1e-6):
 		# Add a mesh to the world.
@@ -64,6 +69,41 @@ class World:
 	def check_unity(rays):
 		directions = rays[:, :, 3:]
 		return np.allclose(np.linalg.norm(directions, axis=2), 1)
+
+	def plot_rays(data, fig=None, visualize=True, plot_unit_sphere=True):
+		if fig is None:
+			fig = plt.figure()
+		# Extract x, y, and z coordinates from the data
+		x = data[:, :, 3].flatten()
+		y = data[:, :, 4].flatten()
+		z = data[:, :, 5].flatten()
+
+		# Create a 3D plot
+		ax = fig.add_subplot(111, projection='3d')
+		ax.scatter(x, y, z, c='b', marker='+')
+
+		if plot_unit_sphere:
+			# Plot a sphere for the origin
+			u, v = np.mgrid[0:2*np.pi:20j, 0:np.pi:10j]
+			x = np.cos(u)*np.sin(v)
+			y = np.sin(u)*np.sin(v)
+			z = np.cos(v)
+			ax.plot_surface(x, y, z, color="r", alpha=0.5)
+
+
+		# Add labels and title
+		ax.set_xlabel('X')
+		ax.set_ylabel('Y')
+		ax.set_zlabel('Z')
+		plt.title('3D Scatter Plot')
+
+		ax.set_box_aspect(aspect=(1, 1, 1)) 
+
+		# Show the plot
+		if visualize:
+			plt.show()
+
+
 
 
 
