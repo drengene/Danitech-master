@@ -40,16 +40,16 @@ class World:
 			self.world = self.world.boolean_difference(mesh, tolerance)
 
 
-	def generate_lidar_rays(horizontal_lines=64, rays_per_line=1024, vertical_fov = np.pi/2):
+	def generate_lidar_rays(horizontal_lines=64, rays_per_line=1024, vertical_fov = np.pi/2, offset = 0):
 		rays = np.zeros((horizontal_lines,rays_per_line, 6), dtype=np.float32)
 		rays_optimized = np.zeros((horizontal_lines,rays_per_line, 6), dtype=np.float32)
 
-		rot_x = np.sin(np.linspace(0, 2*np.pi, rays_per_line))
-		rot_y = np.cos(np.linspace(0, 2*np.pi, rays_per_line))
+		rot_x = np.sin(np.linspace(0 + offset, 2*np.pi, rays_per_line + offset, endpoint=False))
+		rot_y = np.cos(np.linspace(0 + offset, 2*np.pi, rays_per_line + offset, endpoint=False))
 
 		# dz = np.cos(np.linspace((np.pi)/4, 3*np.pi/4, horizontal_lines))
-		dz = np.cos(np.linspace((np.pi)/2 - vertical_fov/2, (np.pi)/2 + vertical_fov/2, horizontal_lines))
-		dz_scale = np.sin(np.linspace((np.pi)/2 - vertical_fov/2, (np.pi)/2 + vertical_fov/2, horizontal_lines))
+		dz = np.cos(np.linspace((np.pi)/2 - vertical_fov/2, (np.pi)/2 + vertical_fov/2, horizontal_lines, endpoint=True))
+		dz_scale = np.sin(np.linspace((np.pi)/2 - vertical_fov/2, (np.pi)/2 + vertical_fov/2, horizontal_lines, endpoint=True))
 
 		# Instead of for loops, directly populate the rays array.
 		# rays[:, :, 0] = 0
