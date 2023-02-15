@@ -29,17 +29,6 @@ if __name__ == "__main__":
 	scene.add_triangles(sphere2)
 	#scene.add_triangles(bunny)
 	_ = scene.add_triangles(sphere)
-
-	camera_rays = o3d.t.geometry.RaycastingScene.create_rays_pinhole(
-		fov_deg=90,
-		center=[0, 0, 2],
-		eye=[2, 3, 0],
-		up=[0, 1, 0],
-		width_px=640,
-		height_px=480,
-	)
-
-	print(camera_rays.shape)
 	#print(camera_rays[0], camera_rays[1])
 
 
@@ -47,7 +36,7 @@ if __name__ == "__main__":
 	time0 = time()
 
 	# Create rays like os1-64.
-	horizontal_lines = 128
+	horizontal_lines = 64
 	rays_per_line = 1024
 	vertical_fov = np.pi/2
 
@@ -57,6 +46,7 @@ if __name__ == "__main__":
 	# The rays are on the form [x, y, z, dx, dy, dz][x, y, z, dx, dy, dz] ... , where the first three values are the origin of the ray, and the last three values are the direction of the ray.
 	# First, create a grid of rays
 	rays = np.zeros((horizontal_lines,rays_per_line, 6), dtype=np.float32)
+	rays_optimized = np.zeros((horizontal_lines,rays_per_line, 6), dtype=np.float32)
 
 	rot_x = np.sin(np.linspace(0, 2*np.pi, rays_per_line))
 	rot_y = np.cos(np.linspace(0, 2*np.pi, rays_per_line))
@@ -66,15 +56,28 @@ if __name__ == "__main__":
 	dz_scale = np.sin(np.linspace((np.pi)/2 - vertical_fov/2, (np.pi)/2 + vertical_fov/2, horizontal_lines))
 	# dz = np.cos(np.linspace((np.pi)/2 - np.pi/2, (np.pi)/2 + np.pi/2, 5))
 
-	# Populate the directions with cos and sin of the angles.
-	for i in range(horizontal_lines):
-		dx =  rot_x * dz_scale[i]
-		dy = rot_y * dz_scale[i]
-		for j in range(rays_per_line):
-			# dx and dy are the sin and cos of the angles. These should be normalized to 1 along with dz.
-			rays[i, j, :] = np.array([2, 3, 1, dx[j], dy[j], dz[i]])
+	
 
-	print("Running initialization of rays took: ", time() - time0, " seconds.")
+	# # Populate the directions with cos and sin of the angles.
+	# for i in range(horizontal_lines):
+	# 	dx =  rot_x * dz_scale[i]
+	# 	dy = rot_y * dz_scale[i]
+	# 	for j in range(rays_per_line):
+	# 		# dx and dy are the sin and cos of the angles. These should be normalized to 1 along with dz.
+	# 		rays[i, j, :] = np.array([2, 3, 1, dx[j], dy[j], dz[i]])
+
+	# Instead of for loops, directly populate the rays array.
+	rays[:, :, 0] = 2
+	rays[:, :, 1] = 3
+	rays[:, :, 2] = 1
+	rays[:, :, 3] = rot_x * dz_scale[:, None]
+	rays[:, :, 4] = rot_y * dz_scale[:, None]
+	rays[:, :, 5] = dz[:, None]
+
+	# Check if the two methods are the same.
+	print("The two methods are the same: ", np.allclose(rays, rays_optimized))
+
+	
 
 	# Print length of dx, dy, dz.
 	directions = rays[:, :, 3:]
@@ -99,8 +102,12 @@ if __name__ == "__main__":
 	# We can directly pass the rays tensor to the cast_rays function.
 	# Time raycasting.
 	t0 = time()
-	ans = scene.cast_rays(rays)
+	for i in range(1000):
+		ans = scene.cast_rays(rays)
 	print(f"Time: {time() - t0:.3f} s")
+
+	print("Running everything took: ", time() - time0, " seconds, giving us a frequency of ", 1 / (time() - time0), "fps")
+
 
 
 
