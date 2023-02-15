@@ -2,6 +2,15 @@ import open3d as o3d
 import numpy as np
 import matplotlib.pyplot as plt
 from time import time
+import cv2
+
+def convert_to_cv2_image(depth):
+	depth[depth == np.inf] = 0
+	depth = depth / np.max(depth)
+	depth = depth * 255
+	depth = depth.astype(np.uint8)
+	depth = cv2.applyColorMap(depth, cv2.COLORMAP_JET)
+	return depth
 
 if __name__ == "__main__":
 	# Create meshes and convert to open3d.t.geometry.TriangleMesh .
@@ -54,17 +63,6 @@ if __name__ == "__main__":
 	# dz = np.cos(np.linspace((np.pi)/4, 3*np.pi/4, horizontal_lines))
 	dz = np.cos(np.linspace((np.pi)/2 - vertical_fov/2, (np.pi)/2 + vertical_fov/2, horizontal_lines))
 	dz_scale = np.sin(np.linspace((np.pi)/2 - vertical_fov/2, (np.pi)/2 + vertical_fov/2, horizontal_lines))
-	# dz = np.cos(np.linspace((np.pi)/2 - np.pi/2, (np.pi)/2 + np.pi/2, 5))
-
-	
-
-	# # Populate the directions with cos and sin of the angles.
-	# for i in range(horizontal_lines):
-	# 	dx =  rot_x * dz_scale[i]
-	# 	dy = rot_y * dz_scale[i]
-	# 	for j in range(rays_per_line):
-	# 		# dx and dy are the sin and cos of the angles. These should be normalized to 1 along with dz.
-	# 		rays[i, j, :] = np.array([2, 3, 1, dx[j], dy[j], dz[i]])
 
 	# Instead of for loops, directly populate the rays array.
 	rays[:, :, 0] = 2
@@ -102,13 +100,22 @@ if __name__ == "__main__":
 	# We can directly pass the rays tensor to the cast_rays function.
 	# Time raycasting.
 	t0 = time()
-	for i in range(1000):
-		ans = scene.cast_rays(rays)
+	ans = scene.cast_rays(rays)
+	# plt.imshow(ans['t_hit'].numpy())
+	# plt.show()
 	print(f"Time: {time() - t0:.3f} s")
 
+	depth = ans['t_hit'].numpy()
+	image = convert_to_cv2_image(depth)
+
 	print("Running everything took: ", time() - time0, " seconds, giving us a frequency of ", 1 / (time() - time0), "fps")
+	
+	cv2.imshow("depth", image)
+	cv2.waitKey(0)
 
+	
 
+	#Convert to 
 
 
 	# # Test 1000 times and get the average time.
@@ -120,10 +127,12 @@ if __name__ == "__main__":
 	# print(f"Time: {(t1 - t0) / 1000:.3f} s")
 	# print("Giving a framerate of ", 1 / ((t1 - t0) / 1000), "fps")
 
+	
+
 	# Visualize the results.
-	plt.imshow(ans['t_hit'].numpy())
-	plt.show()
-	plt.imshow(np.abs(ans['primitive_normals'].numpy()))
-	plt.show()
-	plt.imshow(np.abs(ans['geometry_ids'].numpy()), vmax=3)
-	plt.show()
+	# plt.imshow(ans['t_hit'].numpy())
+	# plt.show()
+	# plt.imshow(np.abs(ans['primitive_normals'].numpy()))
+	# plt.show()
+	# plt.imshow(np.abs(ans['geometry_ids'].numpy()), vmax=3)
+	# plt.show()
