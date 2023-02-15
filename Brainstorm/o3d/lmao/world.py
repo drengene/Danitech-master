@@ -10,7 +10,7 @@ import open3d as o3d
 import numpy as np
 import os
 
-class world:
+class World:
 	def __init__(self, world_file = None):
 		# Initialize the world.
 		# The world is represented as a Triangle Mesh.
