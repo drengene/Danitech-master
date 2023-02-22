@@ -9,13 +9,19 @@ from lmao.lidar import Lidar
 import quaternion
 from scipy.spatial.transform import Rotation as R
 
-def convert_to_cv2_image(depth):
+def convert_to_cv2_image(depth, funnycolor=False, normalize=False):
 	depth[depth == np.inf] = 0
 	depth = depth / np.max(depth)
 	depth = depth * 255
 	depth = depth.astype(np.uint8)
-	depth = cv2.applyColorMap(depth, cv2.COLORMAP_JET)
+	if funnycolor:
+		depth = cv2.applyColorMap(depth, cv2.COLORMAP_JET)
 	return depth
+
+def show_depth(depth):
+	depth = convert_to_cv2_image(depth)
+	cv2.imshow("Depth", depth)
+	cv2.waitKey(1)
 
 if __name__ == "__main__":
 	# Create meshes and convert to open3d.t.geometry.TriangleMesh .
@@ -38,73 +44,93 @@ if __name__ == "__main__":
 	# Create a world.
 	world = World()
 	# Add meshes to world.
-	world.add_mesh_to_scene([cube, torus, sphere2, sphere])
+	world.add_mesh_to_scene([cube, torus, sphere])
+	digital_twin = World()
 
 	# Create a lidar.
 	lidar = Lidar()
+	noisy_lidar = Lidar()
 
 	# Translate rays.
 	lidar.translate_rays([2, 3, 0], change_original=True)
-	#plt.ion()
-	lidar.plot_rays(lidar.rays)
-	sleep(1)
-	# Rotate rays
-	#q = quaternion.as_quat_array([0, 0.707, 0, 0.707])
-	# q = quaternion.as_quat_array([0.707, 0.707, 0, 0]) # xyz = [pi/2, 0, 0] for quaternion library
-	# rotated = lidar.rotate_rays(q)
+	noisy_lidar.translate_rays([2, 3, 0], change_original=True)
 
-	# rotated = lidar.rotate_rays_scipy([0, 0, 0.707, 0.707]) # xyz = [0, 0, pi/2] when x,y,z,w
-	# lidar.plot_rays(rotated)
-	# sleep(1)
-	# lidar.plot_rays(lidar.rays)
-	# # q = quaternion.as_quat_array([0.707,0, 0.707, 0]) # xyz = [0, pi/2, 0] for quaternion library
-	# # rotated = lidar.rotate_rays(q)
-	# rotated = lidar.rotate_rays_scipy([0, 0.707, 0, 0.707]) # xyz = [0, pi/2, 0] when x,y,z,w
-	# lidar.plot_rays(rotated)
-	# sleep(1)
-	# lidar.plot_rays(lidar.rays)
-	# # q = quaternion.from_euler_angles([ 0.707, 0, 0, 0.707]) # xyz = [0, 0, pi/2] for quaternion library
-	# # rotated = lidar.rotate_rays(q)
-	# rotated = lidar.rotate_rays_scipy([0.707, 0, 0, 0.707]) # xyz = [pi/2, 0, 0] when x,y,z,w
-	# lidar.plot_rays(rotated)
-	# sleep(1)
+	# Add noise to the lidar.
+	noisy_lidar.noise(change_original=True)
 
+	#lidar.plot_rays(lidar.rays)
+	#sleep(1)
+	#noisy_lidar.plot_rays(noisy_lidar.rays)
 
-	# Test 1000 times and get the average time.
-	t0 = time()
-	for _ in range(1000):
-		rotated = lidar.rotate_rays([0, 0.707, 0.707, 0])
-	t1 = time()
-	print(f"Time using quaternion library: {(t1 - t0):.3f} s")
-	print("Giving a framerate of ", 1 / ((t1 - t0) / 1000), "fps")
-
-	# Test 1000 times and get the average time.
-	t0 = time()
-	for _ in range(1000):
-		rotated = lidar.rotate_rays_scipy([0, 0.707, 0, 0.707]) # xyz = [0, pi/2, 0] when x,y,z,w
-	t1 = time()
-	print(f"Time using scipy: {(t1 - t0):.3f} s")
-	print("Giving a framerate of ", 1 / ((t1 - t0) / 1000), "fps")
-
-
-
-	exit()
 
 	t0 = time()
-	# Create a 10 second animation with fps of 10
-	for i in range(0, 500):
-		# Create quaternion from rpy
-		q = quaternion.from_euler_angles([(i/500)*2*np.pi, 0.0, 0.0]) # Roll, pitch, yaw
-		rotated = lidar.rotate_rays(q)
-		ans = world.cast_rays(rotated)
-		depth = ans['t_hit'].numpy()
-		image = convert_to_cv2_image(depth)
-		print("Frame ", i, " took ", time() - t0, " seconds, giving us a frequency of ", 1 / (time() - t0), "fps")
-		t0 = time()
-		cv2.imshow("depth", image)
-		cv2.waitKey(1)
+	# Rotate rays.
+	q = np.random.rand(4)
+	q /= np.linalg.norm(q)
+	rotated = lidar.rotate_rays(q)
+	rotated_noisy = noisy_lidar.rotate_rays(q)
+
+	#print("Size of rotated: ", rotated.shape)
+	#print("Size of rotated_noisy: ", rotated_noisy.shape)
+
+	# Cast rays.
+	
+	
 
 
+	# Cast in the digital twin.
+	tens = o3d.core.Tensor(rotated)
+	ans = digital_twin.cast_rays(tens)
+	depth = ans['t_hit'].numpy()
+	
+
+	# Cast in simulated real world
+	tens_noisy = o3d.core.Tensor(rotated_noisy)
+	ans = world.cast_rays(tens_noisy)
+	depth_noisy = ans['t_hit'].numpy()
+	hit = ans['t_hit'].isfinite()
+	points = tens_noisy[hit][:,:3] + tens_noisy[hit][:,3:]*ans['t_hit'][hit].reshape((-1,1))
+	pcd = o3d.t.geometry.PointCloud(points)
+	origin = o3d.geometry.PointCloud()
+	origin.points = o3d.utility.Vector3dVector([[2, 3, 0]])
+	origin.colors = o3d.utility.Vector3dVector([[1, 0, 0]])
+	o3d.visualization.draw([pcd, origin])
+	# Also draw a red point at origin.
+
+
+
+	print(type(depth))
+	# Use matplotlib to visualize depth in full resolution.
+	plt.imshow(depth_noisy, cmap='gray' )
+	plt.show()
+	print("Min: ", np.min(depth_noisy), "Max: ", np.max(depth_noisy))
+
+
+	image = convert_to_cv2_image(depth)
+	image_noisy = convert_to_cv2_image(depth_noisy)
+
+	
+
+	print(type(depth))
+	print(depth.dtype)
+
+	t0 = time()
+	cv2.imshow("depth", image)
+	cv2.imshow("depth_noisy", image_noisy)
+
+
+	cv2.imshow("difference normalized", cv2.absdiff(image, image_noisy))
+
+	# Apply smoothing to differennce image.
+	kernel = np.ones((5, 5), np.float32) / 25
+	smoothed = cv2.filter2D(cv2.absdiff(image, image_noisy), -1, kernel)
+	cv2.imshow("difference smoothed", smoothed)
+	cv2.waitKey(0)
+
+	plt.show()
+
+
+	
 
 	
 

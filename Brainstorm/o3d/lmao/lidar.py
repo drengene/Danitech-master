@@ -21,6 +21,8 @@ class Lidar:
 		self.rays_per_line = rays_per_line
 		self.vertical_fov = vertical_fov
 		self.rays = self.generate_rays(offset=0)
+		self.current_rotation = [0, 0, 0, 1]
+		self.current_position = np.array([0, 0, 0])
 
 
 	def generate_rays(self, offset = 0):
@@ -55,6 +57,7 @@ class Lidar:
 		rays_global = np.concatenate((self.rays[:, :, :3], rays_global_flat.reshape(self.rays.shape[:2] + (3,))), axis=2)
 		if change_original:
 			self.rays = rays_global
+			self.current_rotation = q * self.current_rotation
 		return rays_global
 
 	
@@ -67,6 +70,7 @@ class Lidar:
 		rays_global = np.concatenate((self.rays[:, :, :3], rays_global_flat.reshape(self.rays.shape[:2] + (3,))), axis=2)
 		if change_original:
 			self.rays = rays_global
+			self.current_rotation = q * self.current_rotation
 		return rays_global
 
 
@@ -74,6 +78,7 @@ class Lidar:
 		# Translate the lidar rays into the global coordinate frame
 		if change_original:
 			self.rays[:, :, :3] += pos
+			self.current_position += pos
 			return self.rays
 		else:
 			return self.rays + [pos[0], pos[1], pos[2], 0, 0, 0]
@@ -123,3 +128,12 @@ class Lidar:
 		# Show the plot
 		if visualize:
 			plt.show()
+
+
+	def noise(self, noise_std=0.01, change_original=False):
+		# Add noise to the lidar rays
+		if change_original:
+			self.rays[:, :, 3:] += np.random.normal(0, noise_std, self.rays[:, :, 3:].shape)
+			return self.rays
+		else:
+			return self.rays + np.random.normal(0, noise_std, self.rays.shape)

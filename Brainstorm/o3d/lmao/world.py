@@ -53,7 +53,9 @@ class World:
 				self.scene.add_triangles(mesh)
 
 	def cast_rays(self, lidar):
-		return self.scene.cast_rays(lidar.rays if isinstance(lidar, Lidar) else lidar)
+		# Print type of lidar
+		return self.scene.cast_rays(lidar)
+		#return self.scene.cast_rays(lidar.rays if isinstance(lidar, Lidar) else lidar)
 			
 
 
