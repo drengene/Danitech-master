@@ -14,10 +14,10 @@
 		<param name="frame_id" value="/map" />
 		<param name="base_frame_id" value="base_link" />
 
-		<param name="latch" value="false" />
+		<param name="latch" value="true" />
 
 		<!-- maximum range to integrate (speedup!) -->
-		<param name="sensor_model.max_range" value="12.0" />
+		<param name="sensor_model.max_range" value="5.0" />
 		<param name="sensor_model.min_range" value="1.0" />
 		<!-- <param name="point_cloud_min_x" value"" /> -->
 
