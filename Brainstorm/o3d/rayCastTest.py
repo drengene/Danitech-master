@@ -1,16 +1,28 @@
 import open3d as o3d
+
 import numpy as np
 import matplotlib.pyplot as plt
-from time import time
+from time import time, sleep
 import cv2
+from lmao.world import World
+from lmao.lidar import Lidar
+import quaternion
+from scipy.spatial.transform import Rotation as R
+from lmao.mapping import find_edges, get_derivative
 
-def convert_to_cv2_image(depth):
+def convert_to_cv2_image(depth, funnycolor=False, normalize=False):
 	depth[depth == np.inf] = 0
 	depth = depth / np.max(depth)
 	depth = depth * 255
 	depth = depth.astype(np.uint8)
-	depth = cv2.applyColorMap(depth, cv2.COLORMAP_JET)
+	if funnycolor:
+		depth = cv2.applyColorMap(depth, cv2.COLORMAP_JET)
 	return depth
+
+def show_depth(depth):
+	depth = convert_to_cv2_image(depth)
+	cv2.imshow("Depth", depth)
+	cv2.waitKey(1)
 
 if __name__ == "__main__":
 	# Create meshes and convert to open3d.t.geometry.TriangleMesh .
@@ -18,10 +30,8 @@ if __name__ == "__main__":
 	cube = o3d.t.geometry.TriangleMesh.from_legacy(cube)
 	torus = o3d.geometry.TriangleMesh.create_torus().translate([0, 2, 2])
 	torus = o3d.t.geometry.TriangleMesh.from_legacy(torus)
-	sphere = o3d.geometry.TriangleMesh.create_sphere(radius=0.5).translate(
-		[0, 0, 2])
-	sphere2 = o3d.geometry.TriangleMesh.create_sphere(radius=10).translate(
-		[2, 3, 1])
+	sphere = o3d.geometry.TriangleMesh.create_sphere(radius=0.5).translate([0, 0, 2])
+	sphere2 = o3d.geometry.TriangleMesh.create_sphere(radius=10).translate([2, 3, 1])
 
 	bunny = o3d.data.BunnyMesh()
 	mesh = o3d.io.read_triangle_mesh(bunny.path).translate([0, 0, 2])
@@ -31,87 +41,138 @@ if __name__ == "__main__":
 
 	sphere = o3d.t.geometry.TriangleMesh.from_legacy(sphere)
 	sphere2 = o3d.t.geometry.TriangleMesh.from_legacy(sphere2)
-
-	scene = o3d.t.geometry.RaycastingScene()
-	scene.add_triangles(cube)
-	scene.add_triangles(torus)
-	scene.add_triangles(sphere2)
-	#scene.add_triangles(bunny)
-	_ = scene.add_triangles(sphere)
-	#print(camera_rays[0], camera_rays[1])
-
-
-
-	time0 = time()
-
-	# Create rays like os1-64.
-	horizontal_lines = 64
-	rays_per_line = 1024
-	vertical_fov = np.pi/2
-
-	# os1-64 has 64 channels in the vertical axis and 1024 rays per channel.
-	# The vertical FOV is 90 degrees, while the horizontal FOV is 360 degrees.
-	# The rays are evenly distributed in the horizontal and vertical FOV.
-	# The rays are on the form [x, y, z, dx, dy, dz][x, y, z, dx, dy, dz] ... , where the first three values are the origin of the ray, and the last three values are the direction of the ray.
-	# First, create a grid of rays
-	rays = np.zeros((horizontal_lines,rays_per_line, 6), dtype=np.float32)
-	rays_optimized = np.zeros((horizontal_lines,rays_per_line, 6), dtype=np.float32)
-
-	rot_x = np.sin(np.linspace(0, 2*np.pi, rays_per_line))
-	rot_y = np.cos(np.linspace(0, 2*np.pi, rays_per_line))
-
-	# dz = np.cos(np.linspace((np.pi)/4, 3*np.pi/4, horizontal_lines))
-	dz = np.cos(np.linspace((np.pi)/2 - vertical_fov/2, (np.pi)/2 + vertical_fov/2, horizontal_lines))
-	dz_scale = np.sin(np.linspace((np.pi)/2 - vertical_fov/2, (np.pi)/2 + vertical_fov/2, horizontal_lines))
-
-	# Instead of for loops, directly populate the rays array.
-	rays[:, :, 0] = 2
-	rays[:, :, 1] = 3
-	rays[:, :, 2] = 1
-	rays[:, :, 3] = rot_x * dz_scale[:, None]
-	rays[:, :, 4] = rot_y * dz_scale[:, None]
-	rays[:, :, 5] = dz[:, None]
-
-	# Check if the two methods are the same.
-	print("The two methods are the same: ", np.allclose(rays, rays_optimized))
-
 	
+	# Create a world.
+	world = World()
+	# Add meshes to world.
+	world.add_mesh_to_scene([cube, torus, sphere, sphere2])
+	digital_twin = World()
+	digital_twin.add_mesh_to_scene([cube, torus, bunny, sphere2])
 
-	# Print length of dx, dy, dz.
-	directions = rays[:, :, 3:]
-	# Check if all close
-	print("Direction vectors length for raycasting all close to 1: ",np.allclose(np.linalg.norm(directions, axis=2), 1))
-	print(np.linalg.norm(directions, axis=2))
+	# Create a lidar.
+	lidar = Lidar()
+	noisy_lidar = Lidar()
 
-	# Convert to tensor.
-	rays = o3d.core.Tensor(rays)
-	print(rays.shape)
+	# Translate rays.
+	lidar.translate_rays([2, 3, 0], change_original=True)
+	noisy_lidar.translate_rays([2, 3, 0], change_original=True)
 
-	
-	
+	# Add noise to the lidar.
+	noisy_lidar.noise(change_original=True)
 
-	# ------- WARNING -------
-	# This is wrong, because the rays have length > 1, where they should have length 1.
-	# This is problematic because hit distances are calculated as the length of the ray.   
-	# I can't figure out how to normalize the rays, so I'm just going to use the camera rays for now. 
-		
-	print(rays.shape)
-	#print(rays[0], rays[1])
-	# We can directly pass the rays tensor to the cast_rays function.
-	# Time raycasting.
+	#lidar.plot_rays(lidar.rays)
+	#sleep(1)
+	#noisy_lidar.plot_rays(noisy_lidar.rays)
+
+
 	t0 = time()
-	ans = scene.cast_rays(rays)
-	# plt.imshow(ans['t_hit'].numpy())
-	# plt.show()
-	print(f"Time: {time() - t0:.3f} s")
+	# Rotate rays.
+	q = np.random.rand(4)
+	q /= np.linalg.norm(q)
+	rotated = lidar.rotate_rays(q)
+	rotated_noisy = noisy_lidar.rotate_rays(q)
 
-	depth = ans['t_hit'].numpy()
-	image = convert_to_cv2_image(depth)
+	#print("Size of rotated: ", rotated.shape)
+	#print("Size of rotated_noisy: ", rotated_noisy.shape)
 
-	print("Running everything took: ", time() - time0, " seconds, giving us a frequency of ", 1 / (time() - time0), "fps")
+	# Cast rays.
 	
+	
+
+
+	# Cast in the digital twin.
+	tens = o3d.core.Tensor(rotated)
+	ans = digital_twin.cast_rays(tens)
+	depth = ans['t_hit'].numpy()
+	
+
+	# Cast in simulated real world
+	tens_noisy = o3d.core.Tensor(rotated_noisy)
+	ans = world.cast_rays(tens_noisy)
+	depth_noisy = ans['t_hit'].numpy()
+	hit = ans['t_hit'].isfinite()
+	points = tens_noisy[hit][:,:3] + tens_noisy[hit][:,3:]*ans['t_hit'][hit].reshape((-1,1))
+	pcd = o3d.t.geometry.PointCloud(points)
+	# Convert to open3d.geometry.PointCloud
+	pcd = pcd.to_legacy()
+	pcd.estimate_normals(
+    	search_param=o3d.geometry.KDTreeSearchParamHybrid(radius=1, max_nn=30))
+	print(type(pcd))
+	origin = o3d.geometry.PointCloud()
+	origin.points = o3d.utility.Vector3dVector([[2, 3, 0]])
+	origin.colors = o3d.utility.Vector3dVector([[1, 0, 0]])
+	o3d.visualization.draw_geometries([pcd, origin], point_show_normal=True)
+	# Also draw a red point at origin.
+
+	with o3d.utility.VerbosityContextManager(
+			o3d.utility.VerbosityLevel.Debug) as cm:
+		mesh, densities = o3d.geometry.TriangleMesh.create_from_point_cloud_poisson(
+			pcd, depth=6)
+	# print(mesh)
+	o3d.visualization.draw_geometries([mesh],
+									zoom=0.664,
+									front=[-0.4761, -0.4698, -0.7434],
+									lookat=[1.8900, 3.2596, 0.9284],
+									up=[0.2304, -0.8825, 0.4101])
+
+	print('visualize densities')
+	densities = np.asarray(densities)
+	density_colors = plt.get_cmap('plasma')(
+		(densities - densities.min()) / (densities.max() - densities.min()))
+	density_colors = density_colors[:, :3]
+	density_mesh = o3d.geometry.TriangleMesh()
+	density_mesh.vertices = mesh.vertices
+	density_mesh.triangles = mesh.triangles
+	density_mesh.triangle_normals = mesh.triangle_normals
+	density_mesh.vertex_colors = o3d.utility.Vector3dVector(density_colors)
+	o3d.visualization.draw_geometries([density_mesh],
+									zoom=0.664,
+									front=[-0.4761, -0.4698, -0.7434],
+									lookat=[1.8900, 3.2596, 0.9284],
+									up=[0.2304, -0.8825, 0.4101])
+	print("The end")
+
+	exit()
+	print(type(depth))
+	# Use matplotlib to visualize depth in full resolution.
+	plt.imshow(depth_noisy, cmap='gray' )
+	plt.show()
+	print("Min: ", np.min(depth_noisy), "Max: ", np.max(depth_noisy))
+
+
+	image = convert_to_cv2_image(depth)
+	image_noisy = convert_to_cv2_image(depth_noisy)
+
+	
+
+	print(type(depth))
+	print(depth.dtype)
+
+	t0 = time()
 	cv2.imshow("depth", image)
+	cv2.imshow("depth_noisy", image_noisy)
+
+	#find edges
+	edges = find_edges(image_noisy)
+	cv2.imshow("edges", edges)
+
+	# Apply sobel filter to image
+	gradient = get_derivative(image_noisy)
+	cv2.imshow("gradient", gradient)
+
+
+	cv2.imshow("difference normalized", cv2.absdiff(image, image_noisy))
+
+	# Apply smoothing to differennce image.
+	kernel = np.ones((5, 5), np.float32) / 25
+	smoothed = cv2.filter2D(cv2.absdiff(image, image_noisy), -1, kernel)
+	cv2.imshow("difference smoothed", smoothed)
 	cv2.waitKey(0)
+
+	plt.show()
+
+
+	
 
 	
 

@@ -11,6 +11,7 @@
 import open3d as o3d
 import numpy as np
 import os
+from lmao.lidar import Lidar
 
 
 class World:
@@ -28,7 +29,7 @@ class World:
 
 		self.scene = o3d.t.geometry.RaycastingScene()
 
-	def add_mesh(self, mesh, boolean_operation = "union", tolerance = 1e-6):
+	def boolean_mesh(self, mesh, boolean_operation = "union", tolerance = 1e-6):
 		# Add a mesh to the world.
 		# The boolean_operation argument specifies the type of merge.
 		# The default is a union merge.
@@ -36,7 +37,6 @@ class World:
 		# "union" - The mesh is added to the world.
 		# "intersection" - The mesh is added to the world, but only where it intersects with the world.
 		# "difference" - The mesh is removed from the world.
-
 		if boolean_operation == "union":
 			self.world = self.world.boolean_union(mesh, tolerance)
 		elif boolean_operation == "intersection":
@@ -44,6 +44,19 @@ class World:
 		elif boolean_operation == "difference":
 			self.world = self.world.boolean_difference(mesh, tolerance)
 
+	def add_mesh_to_scene(self, meshes):
+		# Add a meshes to world
+		for mesh in meshes:
+			if not isinstance(mesh, o3d.cuda.pybind.t.geometry.TriangleMesh):
+				raise TypeError("Mesh must be of type TriangleMesh. Mesh is of type: ", type(mesh))
+			else:
+				self.scene.add_triangles(mesh)
+
+	def cast_rays(self, lidar):
+		# Print type of lidar
+		return self.scene.cast_rays(lidar)
+		#return self.scene.cast_rays(lidar.rays if isinstance(lidar, Lidar) else lidar)
+			
 
 
 
