@@ -2,12 +2,11 @@ import os
 from ament_index_python.packages import get_package_share_directory
 from launch import LaunchDescription
 from launch.actions import DeclareLaunchArgument
-from launch.substitutions import LaunchConfiguration
+from launch.substitutions import LaunchConfiguration, PythonExpression
 from launch_ros.actions import Node
 from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch.actions import IncludeLaunchDescription
 from launch.conditions import IfCondition, UnlessCondition
-
 
 def generate_launch_description():
 
@@ -56,11 +55,10 @@ def generate_launch_description():
     ekf_odom_launch = IncludeLaunchDescription(
         PythonLaunchDescriptionSource(
             os.path.join(sensors_launch_pkg, 'launch', 'odom_ekf.launch.py')),
-        launch_arguments={
+        launch_arguments={"sim_arg": LaunchConfiguration('use_sim_time')
         }.items(),
-        condition=IfCondition(LaunchConfiguration('use_ekf'))
+        condition=IfCondition( LaunchConfiguration('use_ekf'))
     )
-
 
 
     return LaunchDescription([

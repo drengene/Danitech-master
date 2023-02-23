@@ -1,7 +1,7 @@
 #include <iostream>
 #include <pcl/point_types.h>
 #include <pcl/filters/passthrough.h>
-#include "rclcpp/rclcpp.hpp"
+#include <rclcpp/rclcpp.hpp>
 
 // Example taken from https://pcl.readthedocs.io/projects/tutorials/en/latest/passthrough.html#
 
@@ -13,7 +13,7 @@ int
 
   // Fill in the cloud data
   cloud->width  = 5;
-  cloud->height = 1;
+  cloud->height = 5;
   cloud->points.resize (cloud->width * cloud->height);
 
   for (auto& point: *cloud)
@@ -30,12 +30,12 @@ int
                         << point.z << std::endl;
 
   // Create the filtering object
-  pcl::PassThrough<pcl::PointXYZ> pass;
-  pass.setInputCloud (cloud);
-  pass.setFilterFieldName ("z");
-  pass.setFilterLimits (0.0, 1.0);
-  //pass.setFilterLimitsNegative (true);
-  pass.filter (*cloud_filtered);
+  pcl::PassThrough<pcl::PointXYZ> passZ;
+  passZ.setInputCloud (cloud);
+  passZ.setFilterFieldName ("z");
+  passZ.setFilterLimits (0.0, 1.0);
+  passZ.setFilterLimitsNegative (true);
+  passZ.filter (*cloud_filtered);
 
   std::cerr << "Cloud after filtering: " << std::endl;
   for (const auto& point: *cloud_filtered)

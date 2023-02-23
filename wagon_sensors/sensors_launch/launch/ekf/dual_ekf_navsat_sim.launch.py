@@ -57,7 +57,7 @@ def generate_launch_description():
 	        output='screen',
             parameters=[parameters_file_path],
             remappings=[#('imu/data', 'navheading'), # The subscribed imu topic
-                        ('imu', 'navheading'), # The subscribed IMU topic (only for initializtion, drops subscription after)
+                        ('imu', 'wagon/base_scan_imu_link/imu'), # The subscribed IMU topic (only for initializtion, drops subscription after)
                         ('gps/fix', 'gps'), # The subscribed gps topic
                         ('gps/filtered', 'gps/filtered'), # The topic to publish the filtered gps data to
                         ('odometry/gps', 'odometry/gps'), # The topic to publish the gps odometry data to

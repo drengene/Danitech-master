@@ -87,6 +87,7 @@ from include.Sensors.imu import IMU
 from include.Sensors.lidar_3d import lidar
 from include.TF.joint_state_publisher import joint_state_pub
 from include.Sensors.gps import gps_pub
+from include.Sensors.pose import pose_pub
 from sensor_msgs.msg import JointState
 from geometry_msgs.msg import PoseWithCovarianceStamped
 from rosgraph_msgs.msg import Clock
@@ -378,7 +379,8 @@ def main():
     time_now = time.time()
 
     joint_states = joint_state_pub("wagon")
-    gps_module = gps_pub( isaac_sim.wagon_prim_path + "/rtk_pole")
+    gps_module = gps_pub( isaac_sim.wagon_prim_path + "/rtk_pole", init_lat=55.471650, init_lon=10.328990)
+    pose_publisher = pose_pub(isaac_sim.wagon_prim_path + "/base_link", "base_link")
     i = 0
 
     isaac_sim.play_world()
@@ -394,16 +396,17 @@ def main():
             isaac_sim.pub_sim_time()
             rclpy.spin_once(isaac_sim, timeout_sec=0.005)
             
-            imu_scan.ros_pub()
+            #imu_scan.ros_pub()
             imu_rear.ros_pub()
 
 
             #print("time: ", time.time() - time_now)
             
             #if i > 300:
-            if i % 7 == 0:
+            if i % 20 == 0:
                 gps_module.pub_gps_data()
                 lidar_sim.ros_pub()
+                pose_publisher.ros_pub()
 
 
             joint_states.pub()
