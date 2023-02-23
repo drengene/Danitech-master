@@ -8,6 +8,7 @@ from lmao.world import World
 from lmao.lidar import Lidar
 import quaternion
 from scipy.spatial.transform import Rotation as R
+from lmao.mapping import find_edges, get_derivative
 
 def convert_to_cv2_image(depth, funnycolor=False, normalize=False):
 	depth[depth == np.inf] = 0
@@ -44,8 +45,9 @@ if __name__ == "__main__":
 	# Create a world.
 	world = World()
 	# Add meshes to world.
-	world.add_mesh_to_scene([cube, torus, sphere])
+	world.add_mesh_to_scene([cube, torus, sphere, sphere2])
 	digital_twin = World()
+	digital_twin.add_mesh_to_scene([cube, torus, bunny, sphere2])
 
 	# Create a lidar.
 	lidar = Lidar()
@@ -91,14 +93,46 @@ if __name__ == "__main__":
 	hit = ans['t_hit'].isfinite()
 	points = tens_noisy[hit][:,:3] + tens_noisy[hit][:,3:]*ans['t_hit'][hit].reshape((-1,1))
 	pcd = o3d.t.geometry.PointCloud(points)
+	# Convert to open3d.geometry.PointCloud
+	pcd = pcd.to_legacy()
+	pcd.estimate_normals(
+    	search_param=o3d.geometry.KDTreeSearchParamHybrid(radius=1, max_nn=30))
+	print(type(pcd))
 	origin = o3d.geometry.PointCloud()
 	origin.points = o3d.utility.Vector3dVector([[2, 3, 0]])
 	origin.colors = o3d.utility.Vector3dVector([[1, 0, 0]])
-	o3d.visualization.draw([pcd, origin])
+	o3d.visualization.draw_geometries([pcd, origin], point_show_normal=True)
 	# Also draw a red point at origin.
 
+	with o3d.utility.VerbosityContextManager(
+			o3d.utility.VerbosityLevel.Debug) as cm:
+		mesh, densities = o3d.geometry.TriangleMesh.create_from_point_cloud_poisson(
+			pcd, depth=6)
+	# print(mesh)
+	o3d.visualization.draw_geometries([mesh],
+									zoom=0.664,
+									front=[-0.4761, -0.4698, -0.7434],
+									lookat=[1.8900, 3.2596, 0.9284],
+									up=[0.2304, -0.8825, 0.4101])
 
+	print('visualize densities')
+	densities = np.asarray(densities)
+	density_colors = plt.get_cmap('plasma')(
+		(densities - densities.min()) / (densities.max() - densities.min()))
+	density_colors = density_colors[:, :3]
+	density_mesh = o3d.geometry.TriangleMesh()
+	density_mesh.vertices = mesh.vertices
+	density_mesh.triangles = mesh.triangles
+	density_mesh.triangle_normals = mesh.triangle_normals
+	density_mesh.vertex_colors = o3d.utility.Vector3dVector(density_colors)
+	o3d.visualization.draw_geometries([density_mesh],
+									zoom=0.664,
+									front=[-0.4761, -0.4698, -0.7434],
+									lookat=[1.8900, 3.2596, 0.9284],
+									up=[0.2304, -0.8825, 0.4101])
+	print("The end")
 
+	exit()
 	print(type(depth))
 	# Use matplotlib to visualize depth in full resolution.
 	plt.imshow(depth_noisy, cmap='gray' )
@@ -117,6 +151,14 @@ if __name__ == "__main__":
 	t0 = time()
 	cv2.imshow("depth", image)
 	cv2.imshow("depth_noisy", image_noisy)
+
+	#find edges
+	edges = find_edges(image_noisy)
+	cv2.imshow("edges", edges)
+
+	# Apply sobel filter to image
+	gradient = get_derivative(image_noisy)
+	cv2.imshow("gradient", gradient)
 
 
 	cv2.imshow("difference normalized", cv2.absdiff(image, image_noisy))
