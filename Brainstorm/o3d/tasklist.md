@@ -13,6 +13,10 @@ The algorithm will compare images from the raycast and the real depth image to d
 - Magnitude of the difference
   - it is more important to update the model where the magnitude of the difference is larger
 
+
+- Opdel billedet i zoner med ens gradienter. Ud fra denne kan de vigtigste trekanter udvælges. Hvis afstandsforskellen mellem gradientzone til nabozone er stor, skal en, fra kameraets synspunkt, usynlig trekant indsættes, således at næste zone kan indsættes med dybde.
+- Derefter skal muligvis laves noget, som gør at de fundne zoner kan representeres af linjer, så de nemmere kan indsættes i modellen som trekanter.
+
 ## Hypothesis
 - Consider creating a hypothesis along the lines of
 ### Mapping
