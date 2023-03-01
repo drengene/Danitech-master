@@ -20,6 +20,8 @@ setup(
     tests_require=['pytest'],
     entry_points={
         'console_scripts': [
+            'articulation_controller = wagon_navigation.articulation_controller:main',
+            'world_tf_pub = wagon_navigation.world_pub:main'
         ],
     },
 )
