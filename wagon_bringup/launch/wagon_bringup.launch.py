@@ -52,6 +52,15 @@ def generate_launch_description():
             parameters=[{}],
     )
 
+    sim_world_tf_node = Node(
+            package='wagon_navigation',
+            executable='world_tf_pub',
+            name='world_tf_pub',
+            output='screen',
+            condition=IfCondition(LaunchConfiguration('use_sim_time')),
+
+    )
+
     ekf_odom_launch = IncludeLaunchDescription(
         PythonLaunchDescriptionSource(
             os.path.join(sensors_launch_pkg, 'launch', 'odom_ekf.launch.py')),
@@ -61,10 +70,12 @@ def generate_launch_description():
     )
 
 
+
     return LaunchDescription([
         sim_time_arg,
         state_publisher_node,
         wheel_vel_translator_node,
+        sim_world_tf_node,
         ekf_arg,
-        ekf_odom_launch
+        ekf_odom_launch,
         ])

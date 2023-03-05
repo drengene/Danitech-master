@@ -1,6 +1,7 @@
 import math
 
 from geometry_msgs.msg import TransformStamped, PoseStamped
+from rosgraph_msgs.msg import Clock
 
 import numpy as np
 
@@ -41,26 +42,42 @@ class FramePublisher(Node):
 
         # Declare and acquire `turtlename` parameter
         self.wagon_name = self.declare_parameter(
-          'base_link_name', '/base_link').get_parameter_value().string_value
+          'base_link_name', 'base_link').get_parameter_value().string_value
 
         # Initialize the transform broadcaster
         self.tf_broadcaster = TransformBroadcaster(self)
-
+        self.secs = 0
+        self.nanosecs = 0
         # Subscribe to a turtle{1}{2}/pose topic and call handle_turtle_pose
         # callback function on each message
-        self.subscription = self.create_subscription(
+        self.pose_subscription = self.create_subscription(
             PoseStamped,
-            self.wagon_name + '_pose',
+            '/' + self.wagon_name + '_pose',
             self.handle_wagon_pose,
             1)
-        self.subscription  # prevent unused variable warning
+        self.pose_subscription  # prevent unused variable warning
+
+        self.clock_sub = self.create_subscription(
+            Clock,
+            '/clock',
+            self.handle_clock,
+            1)
+            
+        self.clock_sub  # prevent unused variable warning
+
+    def handle_clock(self, msg):
+        self.secs = msg.clock.sec
+        self.nanosecs = msg.clock.nanosec
+        # print("Time: " + str(self.time))
+
 
     def handle_wagon_pose(self, msg):
         t = TransformStamped()
 
         # Read message content and assign it to
         # corresponding tf variables
-        t.header.stamp = self.get_clock().now().to_msg()
+        t.header.stamp.sec = self.secs
+        t.header.stamp.nanosec = self.nanosecs
         t.header.frame_id = 'world'
         t.child_frame_id = self.wagon_name
 
