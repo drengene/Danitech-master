@@ -12,6 +12,14 @@ git submodule update
 And everything should be able to build
 
 
+## Start ROS2 Connection
+Due to the network configuration at the university, fast rtps (or simply the transportlayer of ROS2) is setup to use a **discovery server** and a **super client**, which has to be started before ROS2 will properly work between machines (and locally out of the box).
+Start the discovery server with 
+```
+fastdds discovery -i 0 -l 10.126.128.156 -p 11811
+``` Or the alias ```discovery-server``` 
+
+
 ## Start GPS module with RTK correction through NTRIP
 To use the ublox gps module with proper localization both the NTRIP and ublox node needs to be launched with the following
 ```
