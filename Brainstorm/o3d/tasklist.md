@@ -17,6 +17,9 @@ The algorithm will compare images from the raycast and the real depth image to d
 - Opdel billedet i zoner med ens gradienter. Ud fra denne kan de vigtigste trekanter udvælges. Hvis afstandsforskellen mellem gradientzone til nabozone er stor, skal en, fra kameraets synspunkt, usynlig trekant indsættes, således at næste zone kan indsættes med dybde.
 - Derefter skal muligvis laves noget, som gør at de fundne zoner kan representeres af linjer, så de nemmere kan indsættes i modellen som trekanter.
 
+- Den gradient jeg har skal konverteres til 3d space. Så undgår vi at den spheriske natur spiller os et puds.
+- Vi vil gerne bare lappe bagsiden af de overflader vi ser med convex hull, for at undgå at lave surrfaces uden solid fundament.
+
 ## Hypothesis
 - Consider creating a hypothesis along the lines of
 ### Mapping
