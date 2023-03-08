@@ -2,7 +2,9 @@ import rclpy
 from rclpy.node import Node
 from rclpy.executors import ExternalShutdownException
 from std_msgs.msg import String
-from geometry_msgs.msg import Twist, PoseStamped
+from rosgraph_msgs.msg import Clock
+from geometry_msgs.msg import Twist, PoseStamped, PoseArray, Pose, PointStamped
+from visualization_msgs.msg import MarkerArray, Marker
 from nav_msgs.msg import Odometry
 from tf2_msgs.msg import TFMessage
 # import tf
@@ -11,6 +13,7 @@ from tf2_ros.buffer import Buffer
 from tf2_ros.transform_listener import TransformListener
 from rcl_interfaces.msg import ParameterDescriptor
 from scipy.spatial.transform import Rotation as R
+from scipy.interpolate import CubicSpline, Rbf
 
 
 import numpy as np
@@ -41,32 +44,39 @@ class articulationController(Node):
         self.tf_buffer = Buffer()
         self.tf_listener = TransformListener(self.tf_buffer, self)
         
-        self.waypoints = np.array([[8.20931,3.333,-0.206],[9.20931,2.333,-0.206],[10.20931,2.333,-0.206], [14.20931,6.333,-0.206], [16.20931,6.333,-0.206]])
+        self.secs = 0
+        self.nanosecs = 0
+        self.waypoints = np.array([[8.50931,3.333,-0.206],[10.20931,2.333,-0.206], [14.20931,6.333,-0.206], [16.20931,6.333,-0.206], [18.20931,6.533,-0.206], [20.20931,6.533,-0.206], [22.20931,6.533,-0.206]])
 
+        self.spline = np.array([self.waypoints[0]])
+        for i in range(0, len(self.waypoints)-2, 2):
+            splinePoints = self.gen_spline(self.waypoints[i], self.waypoints[i+1], self.waypoints[i+2], 10)
+            # print(splinePoints)
+            self.spline = np.append(self.spline, splinePoints, axis=0)
+ 
+        # print(self.spline)
+        # create a copy of waypoints with 4 additional dimensions
+        self.wayposes = np.zeros((len(self.spline), 7))
+        # copy the waypoints into the first 3 dimensions of wayposes        print(q)
+
+        self.wayposes[:,0:3] = self.spline
+
+        # calculate the direction of travel for each waypoint
+        for i in range(1, len(self.spline)):
+            self.wayposes[i-1,3:7] = self.quaternion_from_two_vectors(self.spline[i-1], self.spline[i])
+
+        #print(self.wayposes)   
         # self.next_position = np.array([8.20931,3.333,-0.206])
+        self.waypoints = self.spline
         self.waypoint_index = 0
 
         self.direction = forwards
         self.setup_sub_pub()
         # self.base_link_position = None
 
-        # while not np.any(self.base_link_position):
-        #     self.get_logger().info('Waiting for base_link pose')
-        #     rclpy.spin_once(self, timeout_sec=1.0)
 
+        
 
-        # print(self.angle_between_base_point(self.base_link_position, self.base_link_orientation, self.next_position))
-        # base_pos = np.array([0,0,0])
-        # orr = np.array([0,0,0,1])
-        # end = np.array([4,2,0.5 ])
-        # test = self.angle_between_base_point(base_pos, orr, end)
-
-        # print("Angle in deg: ", np.rad2deg(test))
-
-        # Get the topic parameters
-
-        # while self
-        # self.control_vehicle()
 
 
     def control_vehicle(self):
@@ -97,6 +107,8 @@ class articulationController(Node):
                 return
             else:
                 self.waypoint_index += 1
+                self.send_wayposes(self.waypoints[self.waypoint_index:])
+
 
 
 
@@ -110,6 +122,79 @@ class articulationController(Node):
         twist_msg.angular.z = angular_vel
         self.twist_publisher.publish(twist_msg)
 
+
+    def send_wayposes(self, wayposes):
+
+        wayposes_msg = PoseArray()
+        wayposes_msg.header.frame_id = self.world_frame
+        wayposes_msg.header.stamp.sec = self.secs
+        wayposes_msg.header.stamp.nanosec = self.nanosecs
+        for pose in wayposes:
+            # print(pose)
+            waypose = Pose()
+            waypose.position.x = pose[0]
+            waypose.position.y = pose[1]
+            waypose.position.z = pose[2]
+            waypose.orientation.x = 0.0 #pose[3]
+            waypose.orientation.y = 0.0 #pose[4]
+            waypose.orientation.z = 0.0 #pose[5]
+            waypose.orientation.w = 1.0 #pose[6]
+            # waypose.orientation = self.base_link_pose.orientation
+            wayposes_msg.poses.append(waypose)
+
+            point = PointStamped()
+            point.header.frame_id = self.world_frame
+            point.header.stamp.sec = self.secs
+            point.header.stamp.nanosec = self.nanosecs
+            point.point.x = pose[0]
+            point.point.y = pose[1]
+            point.point.z = pose[2]
+            self.point_publisher.publish(point)
+
+        self.waypose_publisher.publish(wayposes_msg)
+        # self.marker_publisher.publish(marker_msgs)
+
+    def gen_spline(self, p1, p2, p3, num_points):
+                
+        # Concatenate the points to form a 3x3 array
+        points = np.array([p1, p2, p3])
+
+        # Calculate the distances between each pair of points
+        distances = np.sqrt(np.sum(np.diff(points, axis=0)**2, axis=1))
+
+        # Calculate the cumulative distance along the curve
+        cumulative_distances = np.cumsum(distances)
+        cumulative_distances = np.insert(cumulative_distances, 0, 0) # Add initial distance of 0
+
+        # Create a cubic spline interpolation of the points
+        interp = CubicSpline(cumulative_distances, points, bc_type='natural')
+
+        # Generate 10 points along the curve
+        s_vals = np.linspace(0, cumulative_distances[-1], num_points)
+        interp_points = interp(s_vals)
+        
+        return interp_points
+    
+
+    def quaternion_from_two_vectors(self, point1, point2):
+
+            # Normalize the vectors
+            vec2 = point2 - point1
+
+            vec1 = np.asarray([1,0,0])
+            vec2 = np.asarray(vec2) / np.linalg.norm(vec2)
+
+            # Find the angle between the vectors
+            cos_theta = np.dot(vec1, vec2)
+            axis = np.cross(vec1, vec2)
+
+            # Compute the quaternion
+            quat = np.zeros(4)
+            quat[:3] = axis * np.sin(np.arccos(cos_theta) / 2)
+            quat[3] = np.cos(np.arccos(cos_theta) / 2)
+
+            print(quat)
+            return quat
 
 
     def angle_between_base_point(self, base_point, base_orr, goal_point):
@@ -144,6 +229,20 @@ class articulationController(Node):
         self.base_link_pose_sub = self.create_subscription(PoseStamped, "/base_link_pose", self.base_link_pose_callback, 10)
         self.base_link_pose_sub  # prevent unused variable warning
         self.twist_publisher = self.create_publisher(Twist, self.cmd_vel_topic, 10)
+        self.clock_sub = self.create_subscription(Clock, "/clock", self.clock_callback, 10)
+        self.waypose_publisher = self.create_publisher(PoseArray, "/wayposes", 10)
+
+        self.marker_publisher = self.create_publisher(MarkerArray, "/markers", 10)
+        self.point_publisher = self.create_publisher(PointStamped, "/points", 10)
+        self.send_wayposes(self.wayposes)
+
+
+
+    def clock_callback(self, msg):
+        self.secs = msg.clock.sec
+        self.nanosecs = msg.clock.nanosec
+        # print("Time: " + str(self.time))
+
 
 
     def base_link_pose_callback(self, msg):
@@ -152,6 +251,7 @@ class articulationController(Node):
         # print("pose updated", self.base_link_position)
         try: 
             self.control_vehicle()
+            #self.send_wayposes(self.wayposes)
         except KeyboardInterrupt as e:
             self.send_twist(0.0,0.0)
             print("Keyboard interrupt", e)

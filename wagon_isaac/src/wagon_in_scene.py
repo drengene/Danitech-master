@@ -406,7 +406,7 @@ def main():
             if i % 20 == 0:
                 gps_module.pub_gps_data()
                 lidar_sim.ros_pub()
-                pose_publisher.ros_pub()
+            pose_publisher.ros_pub()
 
 
             joint_states.pub()

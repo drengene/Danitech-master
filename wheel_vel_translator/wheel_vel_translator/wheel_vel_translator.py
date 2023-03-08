@@ -49,14 +49,13 @@ class WheelVelTranslator(Node):
 		self.alpha = 0.0
 		self.alpha_request = 0.0
 		self.v = 0.0
-		self.last_msg = time.time()
+
 
 
 	def cmd_vel_callback(self, msg):
 		self.v = msg.linear.x
 		self.alpha_request = msg.angular.z
 		self.send_control_vel()
-		self.last_msg = time.time()
 
 
 	def joint_state_callback(self, msg):
@@ -65,9 +64,6 @@ class WheelVelTranslator(Node):
 		# Get the joint position
 		self.alpha = msg.position[hydraulic_joint_index]
 		# Calculate the wheel velocities and publish them
-		if time.time() - self.last_msg > self.time_out:
-			self.v = 0
-			self.alpha_request = 0
 		self.send_control_vel()
 
 	def send_control_vel(self):
