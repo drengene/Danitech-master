@@ -14,7 +14,7 @@ from tf2_ros.transform_listener import TransformListener
 from rcl_interfaces.msg import ParameterDescriptor
 from scipy.spatial.transform import Rotation as R
 from scipy.interpolate import CubicSpline, Rbf
-
+from copy import deepcopy
 
 import numpy as np
 
@@ -46,14 +46,20 @@ class articulationController(Node):
         
         self.secs = 0
         self.nanosecs = 0
-        self.waypoints = np.array([[8.50931,3.333,-0.206],[10.20931,2.333,-0.206], [14.20931,6.333,-0.206], [16.20931,6.333,-0.206], [18.20931,6.533,-0.206], [20.20931,6.533,-0.206], [22.20931,6.533,-0.206]])
+        self.waypoints = np.array([[8.50931,3.333,-0.206],[10.20931,2.333,-0.206], [14.20931,6.333,-0.206], [20.20931,6.333,-0.206], [26.20931,6.333,-0.206], [28.20931,2.533,-0.206], [30.20931,2.533,-0.206], [32.20931,6.533,-0.206]])
+
+        self.og_waypoints = deepcopy(self.waypoints)
+
 
         self.spline = np.array([self.waypoints[0]])
-        for i in range(0, len(self.waypoints)-2, 2):
-            splinePoints = self.gen_spline(self.waypoints[i], self.waypoints[i+1], self.waypoints[i+2], 10)
-            # print(splinePoints)
-            self.spline = np.append(self.spline, splinePoints, axis=0)
- 
+        # for i in range(0, len(self.waypoints)-2, 1):
+        #     splinePoints = self.gen_spline(self.waypoints[i], self.waypoints[i+1], self.waypoints[i+2], 10)
+        #     # print(splinePoints)
+        #     self.spline = np.append(self.spline, splinePoints, axis=0)
+
+
+        self.spline = self.gen_spline(self.waypoints, 0.5)
+
         # print(self.spline)
         # create a copy of waypoints with 4 additional dimensions
         self.wayposes = np.zeros((len(self.spline), 7))
@@ -68,15 +74,59 @@ class articulationController(Node):
         #print(self.wayposes)   
         # self.next_position = np.array([8.20931,3.333,-0.206])
         self.waypoints = self.spline
+        
         self.waypoint_index = 0
 
         self.direction = forwards
         self.setup_sub_pub()
+
+
         # self.base_link_position = None
 
 
         
 
+    def setup_sub_pub(self):
+        # self.tf_topic = self.create_subscription(TFMessage, 'tf', self.tf_callback, 10)
+        # self.tf_topic  # prevent unused variable warning
+        self.base_link_pose_sub = self.create_subscription(PoseStamped, "/base_link_pose", self.base_link_pose_callback, 10)
+        self.base_link_pose_sub  # prevent unused variable warning
+        self.twist_publisher = self.create_publisher(Twist, self.cmd_vel_topic, 10)
+        self.clock_sub = self.create_subscription(Clock, "/clock", self.clock_callback, 10)
+        self.waypose_publisher = self.create_publisher(PoseArray, "/wayposes", 10)
+
+        self.marker_publisher = self.create_publisher(MarkerArray, "/markers", 10)
+        self.point_publisher = self.create_publisher(PointStamped, "/points", 10)
+        self.send_wayposes(self.wayposes)
+
+
+
+
+
+    def clock_callback(self, msg):
+        self.secs = msg.clock.sec
+        self.nanosecs = msg.clock.nanosec
+        # print("Time: " + str(self.time))
+
+
+
+    def base_link_pose_callback(self, msg):
+        self.base_link_position = np.array([msg.pose.position.x, msg.pose.position.y, msg.pose.position.z])
+        self.base_link_orientation = np.array([msg.pose.orientation.x, msg.pose.orientation.y, msg.pose.orientation.z, msg.pose.orientation.w])
+        # print("pose updated", self.base_link_position)
+        try: 
+            self.control_vehicle()
+            # self.send_wayposes(self.wayposes)
+            # for point in self.og_waypoints:
+            # # print(point)
+            #     self.send_points(point)
+
+
+        except KeyboardInterrupt as e:
+            self.send_twist(0.0,0.0)
+            print("Keyboard interrupt", e)
+        # combine the two np arrays in a single flat array
+        # self.base_link_pose = np.concatenate((self.base_link_position, self.base_link_orientation))
 
 
     def control_vehicle(self):
@@ -100,14 +150,14 @@ class articulationController(Node):
             # return
         if dist < 0.5:
             print("Reached Waypoint, Distance: ", dist)
-            if self.waypoint_index >= len(self.waypoints):
+            if self.waypoint_index >= len(self.waypoints) - 1:
                 print("Reached Final Waypoint, quitting, Distance: ", dist)
                 self.send_twist(0.0,0.0)
                 self.destroy_node()
                 return
             else:
                 self.waypoint_index += 1
-                self.send_wayposes(self.waypoints[self.waypoint_index:])
+                self.send_wayposes(self.wayposes[self.waypoint_index:])
 
 
 
@@ -122,6 +172,16 @@ class articulationController(Node):
         twist_msg.angular.z = angular_vel
         self.twist_publisher.publish(twist_msg)
 
+    def send_points(self, pose):
+        point = PointStamped()
+        point.header.frame_id = self.world_frame
+        point.header.stamp.sec = self.secs
+        point.header.stamp.nanosec = self.nanosecs
+        point.point.x = pose[0]
+        point.point.y = pose[1]
+        point.point.z = pose[2]
+        self.point_publisher.publish(point)
+
 
     def send_wayposes(self, wayposes):
 
@@ -135,29 +195,22 @@ class articulationController(Node):
             waypose.position.x = pose[0]
             waypose.position.y = pose[1]
             waypose.position.z = pose[2]
-            waypose.orientation.x = 0.0 #pose[3]
-            waypose.orientation.y = 0.0 #pose[4]
-            waypose.orientation.z = 0.0 #pose[5]
-            waypose.orientation.w = 1.0 #pose[6]
+            waypose.orientation.x = pose[3]
+            waypose.orientation.y = pose[4]
+            waypose.orientation.z = pose[5]
+            waypose.orientation.w = pose[6]
             # waypose.orientation = self.base_link_pose.orientation
             wayposes_msg.poses.append(waypose)
 
-            point = PointStamped()
-            point.header.frame_id = self.world_frame
-            point.header.stamp.sec = self.secs
-            point.header.stamp.nanosec = self.nanosecs
-            point.point.x = pose[0]
-            point.point.y = pose[1]
-            point.point.z = pose[2]
-            self.point_publisher.publish(point)
+
 
         self.waypose_publisher.publish(wayposes_msg)
         # self.marker_publisher.publish(marker_msgs)
 
-    def gen_spline(self, p1, p2, p3, num_points):
+    def gen_spline(self, points, resolution):
                 
         # Concatenate the points to form a 3x3 array
-        points = np.array([p1, p2, p3])
+        # points = np.array([p1, p2, p3])
 
         # Calculate the distances between each pair of points
         distances = np.sqrt(np.sum(np.diff(points, axis=0)**2, axis=1))
@@ -168,11 +221,18 @@ class articulationController(Node):
 
         # Create a cubic spline interpolation of the points
         interp = CubicSpline(cumulative_distances, points, bc_type='natural')
+ 
+        # Generate points along the curve at the specified resolution
+        s_vals = np.array([])
+        for idx, dist in enumerate(cumulative_distances[:-1], ):
+            num_points = int(np.ceil((cumulative_distances[idx + 1] - dist)/resolution))
+            print(num_points)
+            s_val = np.linspace(dist, cumulative_distances[idx + 1], num_points)
+            s_vals = np.append(s_vals, s_val[1:])
 
         # Generate 10 points along the curve
-        s_vals = np.linspace(0, cumulative_distances[-1], num_points)
         interp_points = interp(s_vals)
-        
+
         return interp_points
     
 
@@ -223,40 +283,6 @@ class articulationController(Node):
 
         return theta
  
-    def setup_sub_pub(self):
-        # self.tf_topic = self.create_subscription(TFMessage, 'tf', self.tf_callback, 10)
-        # self.tf_topic  # prevent unused variable warning
-        self.base_link_pose_sub = self.create_subscription(PoseStamped, "/base_link_pose", self.base_link_pose_callback, 10)
-        self.base_link_pose_sub  # prevent unused variable warning
-        self.twist_publisher = self.create_publisher(Twist, self.cmd_vel_topic, 10)
-        self.clock_sub = self.create_subscription(Clock, "/clock", self.clock_callback, 10)
-        self.waypose_publisher = self.create_publisher(PoseArray, "/wayposes", 10)
-
-        self.marker_publisher = self.create_publisher(MarkerArray, "/markers", 10)
-        self.point_publisher = self.create_publisher(PointStamped, "/points", 10)
-        self.send_wayposes(self.wayposes)
-
-
-
-    def clock_callback(self, msg):
-        self.secs = msg.clock.sec
-        self.nanosecs = msg.clock.nanosec
-        # print("Time: " + str(self.time))
-
-
-
-    def base_link_pose_callback(self, msg):
-        self.base_link_position = np.array([msg.pose.position.x, msg.pose.position.y, msg.pose.position.z])
-        self.base_link_orientation = np.array([msg.pose.orientation.x, msg.pose.orientation.y, msg.pose.orientation.z, msg.pose.orientation.w])
-        # print("pose updated", self.base_link_position)
-        try: 
-            self.control_vehicle()
-            #self.send_wayposes(self.wayposes)
-        except KeyboardInterrupt as e:
-            self.send_twist(0.0,0.0)
-            print("Keyboard interrupt", e)
-        # combine the two np arrays in a single flat array
-        # self.base_link_pose = np.concatenate((self.base_link_position, self.base_link_orientation))
 
 
     def tester(self):
