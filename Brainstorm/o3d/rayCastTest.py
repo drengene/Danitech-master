@@ -11,8 +11,8 @@ from scipy.spatial.transform import Rotation as R
 from lmao.mapping import get_normals
 from scipy import ndimage
 from scipy.spatial import Delaunay
-import numba as nb
-from numba import jit
+from lmao.util.bag_loader import BagLoader
+
 
 def convert_to_cv2_image(depth, funnycolor=False, normalize=False):
 	depth[depth == np.inf] = 0
@@ -67,6 +67,7 @@ def remove_significant_differences_noangle(original_array, threshold):
 if __name__ == "__main__":
 	# Create meshes and convert to open3d.t.geometry.TriangleMesh .
 	cube = o3d.geometry.TriangleMesh.create_box().translate([0, 0, 0])
+	cube.scale(2, center=cube.get_center())
 	cube = o3d.t.geometry.TriangleMesh.from_legacy(cube)
 	torus = o3d.geometry.TriangleMesh.create_torus().translate([0, 2, 2])
 	torus = o3d.t.geometry.TriangleMesh.from_legacy(torus)
@@ -130,6 +131,8 @@ if __name__ == "__main__":
 	# Cast in simulated real world
 	tens_noisy = o3d.core.Tensor(rotated_noisy)
 	ans = world.cast_rays(tens_noisy)
+
+
 	print("Keys in ans: ", ans.keys())
 	depth_noisy = ans['t_hit'].numpy()
 	hit = ans['t_hit'].isfinite()
@@ -146,13 +149,25 @@ if __name__ == "__main__":
 	o3d.visualization.draw_geometries([pcd, origin], point_show_normal=True)
 
 	# Apply numpy median filter to depth image
-	depth_noisy = ndimage.median_filter(depth_noisy, size=3)
+	depth_noisy = ndimage.median_filter(depth_noisy, size=5)
 	# Apple gaussian filter to depth image
 	depth_noisy = ndimage.gaussian_filter(depth_noisy, sigma=1)
+	depth_noisy = ndimage.median_filter(depth_noisy, size=3)
 
 	# Transform depth points to world coordinates.
 	image = rotated[:,:,:3] + depth_noisy[:,:,np.newaxis]*rotated[:,:,3:]
 	
+	bagloader = BagLoader(bagpath = '/home/junge/Documents/rosbag2_2023_03_09-15_53_39',topics = ['/points'])
+	image, depth = bagloader.get_pointcloud('/points')
+	min_depth = np.min(depth)
+	max_depth = np.max(depth)
+	print("Min depth: ", min_depth, "Max depth: ", max_depth)
+	plt.imshow(abs(image))
+	plt.show()
+	plt.imshow(depth)
+	plt.show()
+
+
 
 	normal_image = get_normals(image)
 
@@ -162,6 +177,7 @@ if __name__ == "__main__":
 	#plt.imshow(normal_image)
 	axs[0].imshow(abs(normal_image))
 	axs[0].set_title("Normals from gradient")
+	plt.show()
 
 	# Compare with the normals from the original raycast
 	actual_normals = ans['primitive_normals'].numpy()
@@ -189,7 +205,7 @@ if __name__ == "__main__":
 	
 	#clean = remove_significant_differences_angle_optim(result, 5)
 	#clean = remove_significant_differences_noangle(result, 0.1)
-	clean = remove_significant_differences_noangle(result, 0.1)
+	clean = remove_significant_differences_noangle(result, 0.2)
 
 	# Time "remove_significant_differences_angle" and "remove_significant_differences_noangle"
 	# t0 = time()
@@ -215,9 +231,29 @@ if __name__ == "__main__":
 
 	# Get a binary mask of the points that are not the null vector in the "clean" image
 	mask = np.logical_and(np.logical_and(clean[:, :, 0] != 0, clean[:, :, 1] != 0), clean[:, :, 2] != 0)
+	
+	# Get binary mask of points that are 0 in image[:, :, 8]
+	mask2 = depth > 500
+	hist = np.histogram(depth, bins=100)
+	# Show histogram of depth values
+	plt.plot(hist[1][:-1], hist[0])
+	plt.show()
+
+
+	# Show the mask
+	plt.imshow(mask2)
+	# give a title
+	plt.title("Mask of points that are greater than 500mm in distance")
+	plt.show()
+
 	# Show the mask
 	plt.imshow(mask)
+	# give a title
+	plt.title("Mask of points that are not the null vector in the estimated normals")
 	plt.show()
+
+	# Combine the two masks
+	mask = np.logical_and(mask, mask2)
 
 	# Show the wrapped mask
 	plt.imshow(mask)
@@ -239,8 +275,9 @@ if __name__ == "__main__":
 	print("Shape of tri.points: ", tri.points.shape)
 	print("Shape of points: ", points.shape)
 
-	vertices = np.array(image[tri.points[:, 0].astype(int), tri.points[:, 1].astype(int)])
+	vertices = np.array(image[tri.points[:, 0].astype(int), tri.points[:, 1].astype(int), :3] )
 	print("Size of vertices: ", vertices.shape)
+	print("Type of vertices: ", vertices.dtype)
 
 	# Create a triangle mesh from the triangulation
 	mesh = o3d.geometry.TriangleMesh()
@@ -248,9 +285,11 @@ if __name__ == "__main__":
 	mesh.vertices = o3d.utility.Vector3dVector(vertices)
 	# Create triangles using the simplices from the triangulation
 	mesh.triangles = o3d.utility.Vector3iVector(tri.simplices)
+	# Add edges
+
 
 	# Paint the mesh in a color defined by the normals
-	mesh.vertex_colors = o3d.utility.Vector3dVector(clean[tri.points[:, 0].astype(int), tri.points[:, 1].astype(int)])
+	mesh.vertex_colors = o3d.utility.Vector3dVector(abs(normal_image[tri.points[:, 0].astype(int), tri.points[:, 1].astype(int)]))
 
 
 	# Show the mesh
