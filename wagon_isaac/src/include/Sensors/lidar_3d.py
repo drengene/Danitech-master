@@ -12,10 +12,9 @@ from rclpy.node import Node
 import time
 from sensor_msgs.msg import PointCloud2, PointField
 
-ros_dtype = PointField.FLOAT32
+ros_dtype = [PointField.FLOAT32, PointField.FLOAT32, PointField.FLOAT32, PointField.FLOAT32, PointField.UINT32, PointField.UINT16, PointField.UINT8, PointField.UINT16, PointField.UINT32]
 dtype = np.float32
 itemsize = np.dtype(dtype).itemsize # A 32-bit float takes 4 bytes.
-
 
 
 class lidar(Node):
@@ -29,6 +28,8 @@ class lidar(Node):
         self.lidarName = lidarName
         self.lidarParent = lidarParent
         self.lidarPath = lidarParent + lidarName
+
+
         result, prim = omni.kit.commands.execute(
                     "RangeSensorCreateLidar",
                     path=self.lidarName,
@@ -40,8 +41,8 @@ class lidar(Node):
                     horizontal_fov=360.0,
                     vertical_fov=90.0,
                     horizontal_resolution=360/1024,
-                    vertical_resolution=90/64,
-                    rotation_rate=10.0,
+                    vertical_resolution=90/63,
+                    rotation_rate=0,
                     high_lod=True,
                     yaw_offset=0.0,
                     enable_semantics=False
@@ -53,31 +54,64 @@ class lidar(Node):
 
 
     def ros_pub(self):
-        lidar_data = self.lidarInterface.get_point_cloud_data(self.lidarPath)
+        pointcloud_data = self.lidarInterface.get_point_cloud_data(self.lidarPath)
+        intensity_data = self.lidarInterface.get_intensity_data(self.lidarPath).astype(np.float32)
+        t_data = np.zeros_like(intensity_data, dtype=np.uint32)
+        reflectivity_data = np.zeros_like(intensity_data, dtype=np.uint16)
+        ring_data = np.zeros_like(intensity_data, dtype=np.uint8)
+        ambient_data = np.zeros_like(intensity_data, dtype=np.uint16)
+        range_data = self.lidarInterface.get_linear_depth_data(self.lidarPath) # Is type FLOAT32 in meters and should be converted to UNIT32 in mm
+        range_data = range_data * 1000
+        range_data = range_data.astype(np.uint32)
+
+
         # publish lidar data to ros as pointcloud2
-  
+
+        # print("publish lidar data")
+
         sim_time = self.sim_context.current_time
         self.msg.header.stamp.sec = int(sim_time)
         self.msg.header.stamp.nanosec = int((sim_time - int(sim_time)) * 1e9)
         self.msg.header.frame_id = 'base_scan'
-        self.msg.height = len(lidar_data[0])
-        self.msg.width = len(lidar_data)
+        self.msg.height = len(pointcloud_data[0])
+        self.msg.width = len(pointcloud_data)
 
         self.msg.fields =  [PointField(
-            name=n, offset=i*itemsize, datatype=ros_dtype, count=1)
-            for i, n in enumerate('xyz')]
+            name=n, offset=i*itemsize, datatype=ros_dtype[i], count=1) for i, n in enumerate(['x', 'y', 'z','intensity', 't', 'reflectivity', 'ring', 'ambient', 'range'])]
         self.msg.is_bigendian = False
         self.msg.point_step = 12
         self.msg.row_step = self.msg.point_step * self.msg.width
         self.msg.is_dense = True
-        #data = lidar_data.astype(dtype).tobytes() 
-        #self.msg.data = data
-        #self.msg.data = lidar_data.astype(dtype).tobytes() # This shit takes like 0.01 seconds
-        self.msg._data = lidar_data.astype(dtype).tobytes() # This is a lot faster, but unsafe and untested, as it relies on the private _data attribute
+
+        self.msg._data = pointcloud_data.astype(dtype).tobytes() # This is a lot faster, but unsafe and untested, as it relies on the private _data attribute
         #print("time: ", time.time() - time_now)
         self.pub.publish(self.msg)
 
 
+    def ros_pub_old(self):
+            lidar_data = self.lidarInterface.get_point_cloud_data(self.lidarPath)
+            # publish lidar data to ros as pointcloud2
+    
+            sim_time = self.sim_context.current_time
+            self.msg.header.stamp.sec = int(sim_time)
+            self.msg.header.stamp.nanosec = int((sim_time - int(sim_time)) * 1e9)
+            self.msg.header.frame_id = 'base_scan'
+            self.msg.height = len(lidar_data[0])
+            self.msg.width = len(lidar_data)
+
+            self.msg.fields =  [PointField(
+                name=n, offset=i*itemsize, datatype=ros_dtype, count=1)
+                for i, n in enumerate('xyz')]
+            self.msg.is_bigendian = False
+            self.msg.point_step = 12
+            self.msg.row_step = self.msg.point_step * self.msg.width
+            self.msg.is_dense = True
+            #data = lidar_data.astype(dtype).tobytes() 
+            #self.msg.data = data
+            #self.msg.data = lidar_data.astype(dtype).tobytes() # This shit takes like 0.01 seconds
+            self.msg._data = lidar_data.astype(dtype).tobytes() # This is a lot faster, but unsafe and untested, as it relies on the private _data attribute
+            #print("time: ", time.time() - time_now)
+            self.pub.publish(self.msg)
 
 
     async def get_lidar_param(self):                                    # Function to retrieve data from the LIDAR

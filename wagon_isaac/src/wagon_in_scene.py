@@ -306,7 +306,7 @@ class IsaacSim(Node):
         hydraulic_force = prim.GetAttribute("drive:angular:physics:maxForce")
         hydraulic_s.Set(1000.00)
         hydraulic_d.Set(150.00)
-        hydraulic_force.Set(5000.0)
+        hydraulic_force.Set(2500.0)
         #print("max efforts hydrolic:", self.robot_view.get_max_efforts(joint_indices=[1]))
         #self.robot_view.set_max_efforts([500.0], joint_indices=[1])
         #print("max efforts hydrolic:", self.robot_view.get_max_efforts(joint_indices=[1]))
@@ -405,7 +405,10 @@ def main():
             #if i > 300:
             if i % 20 == 0:
                 gps_module.pub_gps_data()
+
+            if i % 6 == 0:
                 lidar_sim.ros_pub()
+                
             pose_publisher.ros_pub()
 
 
