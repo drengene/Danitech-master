@@ -15,12 +15,13 @@ from rcl_interfaces.msg import ParameterDescriptor
 from scipy.spatial.transform import Rotation as R
 from scipy.interpolate import CubicSpline, Rbf
 from copy import deepcopy
+from time import sleep
 
 import numpy as np
 
 
-forwards = 1
-backwards = -1
+FORWARDS = 1
+BACKWARDS = -1
 
 class articulationController(Node):
     
@@ -47,6 +48,8 @@ class articulationController(Node):
         self.secs = 0
         self.nanosecs = 0
         manual = False
+        self.old_dist = np.inf
+        self.waypoints = None
 
         if manual:
             self.waypoints = np.array([[8.50931,3.333,-0.206],[10.20931,2.333,-0.206], [14.20931,6.333,-0.206], [20.20931,6.333,-0.206], [26.20931,6.333,-0.206], [28.20931,2.533,-0.206], [30.20931,2.533,-0.206], [32.20931,6.533,-0.206]])
@@ -65,13 +68,12 @@ class articulationController(Node):
 
     def wait_for_goal(self):
 
-        while self.goal_position is None:
-            # Spin once
-            rclpy.spin_once(self, timeout_sec=0.1)
-        self.gen_init_path(np.array([self.goal_position]))
+        if np.any(self.goal_position):
+            print("Goal position received: ", self.goal_position)
+            self.gen_init_path(np.array([self.goal_position]))
+        sleep(0.5)
+        return
 
-        self.goal_position = None
-        self.goal_orientation = None
 
 
     def gen_init_path(self, _waypoints):
@@ -84,9 +86,14 @@ class articulationController(Node):
         _waypoints = np.insert(_waypoints, 0, self.base_link_position, axis=0)
 
 
-        theta = self.angle_between_base_point(self.base_link_position, self.base_link_orientation, _waypoints[1])
-        if self.direction == backwards: # Could also be done by placing point behind robot for the spline, but still going to the original next point
+        theta, direction = self.angle_between_base_point(self.base_link_position, self.base_link_orientation, _waypoints[1], get_direction=True)
+        if direction == BACKWARDS: # Could also be done by placing point behind robot for the spline, but still going to the original next point
             # create a new point 2 meters in front of base_link_position, in relation to the base_link_orientation
+            _waypoints = np.insert(_waypoints, 1, [self.base_link_position[0] + 5 * np.cos(self.base_link_orientation[2]),
+                                                    self.base_link_position[1] + 5 * np.sin(self.base_link_orientation[2]),
+                                                      self.base_link_position[2]], axis=0)
+
+        else:
             _waypoints = np.insert(_waypoints, 1, [self.base_link_position[0] + 2 * np.cos(self.base_link_orientation[2]),
                                                     self.base_link_position[1] + 2 * np.sin(self.base_link_orientation[2]),
                                                       self.base_link_position[2]], axis=0)
@@ -112,7 +119,7 @@ class articulationController(Node):
         
         self.waypoint_index = 0
 
-        # self.direction = forwards
+        # self.direction = FORWARDS
 
 
     def setup_sub_pub(self):
@@ -144,7 +151,7 @@ class articulationController(Node):
         # self.goal_position = np.array([msg.pose.position.x, msg.pose.position.y, msg.pose.position.z])
         self.goal_position = np.array([msg.pose.position.x, msg.pose.position.y, self.base_link_position[2]])
         self.goal_orientation = np.array([msg.pose.orientation.x, msg.pose.orientation.y, msg.pose.orientation.z, msg.pose.orientation.w])
-        # print("goal pose updated", self.goal_position)
+        print("goal pose updated", self.goal_position)
 
 
     def base_link_pose_callback(self, msg):
@@ -152,11 +159,14 @@ class articulationController(Node):
         self.base_link_orientation = np.array([msg.pose.orientation.x, msg.pose.orientation.y, msg.pose.orientation.z, msg.pose.orientation.w])
         # print("pose updated", self.base_link_position)
         try: 
-            
-            if self.control_vehicle2():
-                self.wait_for_goal()
+            if np.any(self.waypoints):
+                end = self.control_vehicle2()
+                if end:
+                    self.goal_position = None
+                    self.waypoints = None
+                    print("waiting for new goal")
             else:
-                pass
+                self.wait_for_goal()
             # self.send_wayposes(self.wayposes)
             # for point in self.og_waypoints:
             # # print(point)
@@ -167,30 +177,62 @@ class articulationController(Node):
             self.send_twist(0.0,0.0)
             print("Keyboard interrupt", e)
 
-        except AttributeError as e: 
-            print(e, "values not defined yet")
-            pass
+
         # combine the two np arrays in a single flat array
         # self.base_link_pose = np.concatenate((self.base_link_position, self.base_link_orientation))
 
 
     def control_vehicle2(self):
 
-        angle_diff = self.angle_between_base_point(self.base_link_position, self.base_link_orientation, self.waypoints[self.waypoint_index])
-        dist = np.linalg.norm(self.base_link_position - self.waypoints[self.waypoint_index])
+        if self.waypoint_index >= len(self.waypoints) - 1:
+            print("Reached Final Waypoint" )
+            self.send_twist(0.0,0.0)
+            return 1
+        
+        angle_diff, direction = self.angle_between_base_point(self.base_link_position, self.base_link_orientation, self.waypoints[self.waypoint_index], get_direction=True)
+        angle_diff_next = self.angle_between_base_point(self.base_link_position, self.base_link_orientation, self.waypoints[self.waypoint_index+1])
 
-        self.send_twist(0.7, angle_diff) # Add regulatation if diff is larger than max angle, e.g. lower speed
+        dist_pose_point = np.linalg.norm(self.base_link_position - self.waypoints[self.waypoint_index])
+        dist_pointA_pointB = np.linalg.norm(self.waypoints[self.waypoint_index - 1] - self.waypoints[self.waypoint_index])
 
-        if dist < 0.5:
-            print("Reached Waypoint, Distance: ", dist)
-            if self.waypoint_index >= len(self.waypoints) - 1:
-                print("Reached Final Waypoint, waiting for new goal, Distance: ", dist)
-                self.send_twist(0.0,0.0)
-                return 1
-            else:
-                self.waypoint_index += 1
-                self.send_wayposes(self.wayposes[self.waypoint_index:])
-                return 0
+        curr_point_weight = dist_pose_point/dist_pointA_pointB
+
+        # create a sigmoid function from dist pose point to dist pointA pointB with a gain of five
+        point_weight = 1/(1 + np.exp(10*(-curr_point_weight+0.5)))
+
+        next_point_weight = 1 - point_weight
+
+        if direction == BACKWARDS:
+            print("Reached Waypoint, Distance: ", dist_pose_point)
+            #angle = angle_diff_next
+            self.waypoint_index += 1
+            self.send_wayposes(self.wayposes[self.waypoint_index:])
+            self.old_dist = np.inf
+        else:
+            self.old_dist = dist_pose_point
+        
+
+            # self.send_wayposes(self.wayposes[self.waypoint_index:])
+        angle = angle_diff * point_weight + angle_diff_next * next_point_weight
+
+        print("Angle: ", angle)
+        self.send_twist(0.7, angle*1.5) # Add regulatation if diff is larger than max angle, e.g. lower speed
+
+
+        return 0
+
+
+
+        # if dist < 0.5:
+        #     print("Reached Waypoint, Distance: ", dist)
+        #     if self.waypoint_index >= len(self.waypoints) - 1:
+        #         print("Reached Final Waypoint, waiting for new goal, Distance: ", dist)
+        #         self.send_twist(0.0,0.0)
+        #         return 1
+        #     else:
+        #         self.waypoint_index += 1
+        #         self.send_wayposes(self.wayposes[self.waypoint_index:])
+        #         return 0
 
 
 
@@ -289,7 +331,7 @@ class articulationController(Node):
         cumulative_distances = np.insert(cumulative_distances, 0, 0) # Add initial distance of 0
 
         # Create a cubic spline interpolation of the points
-        interp = CubicSpline(cumulative_distances, points, bc_type='neutral')
+        interp = CubicSpline(cumulative_distances, points, bc_type='not-a-knot')
  
         # Generate points along the curve at the specified resolution
         s_vals = np.array([])
@@ -326,7 +368,7 @@ class articulationController(Node):
             return quat
 
 
-    def angle_between_base_point(self, base_point, base_orr, goal_point):
+    def angle_between_base_point(self, base_point, base_orr, goal_point, get_direction = False):
 
         r = R.from_quat(base_orr)
         base_plane_norm = r.apply([0,1,0])
@@ -340,16 +382,21 @@ class articulationController(Node):
         theta = np.arcsin(cos_theta)
 
         cos_theta_dir = np.dot(base_dir_vec, goal_vec) / (np.linalg.norm(base_dir_vec) * np.linalg.norm(goal_vec))
-
+        
+        direction = FORWARDS
         # print(np.arccos(cos_theta_dir))
         if np.abs(np.arccos(cos_theta_dir)) > np.pi/2:
             print("point possibly behind")
-            self.direction = backwards
+            direction = BACKWARDS
             # return np.arcsin(cos_theta) + np.sign(np.arcsin(cos_theta)) * np.pi/2
-            return np.pi * np.sign(theta) - theta
+            theta = np.pi * np.sign(theta) - theta
+            
         
-        self.direction = forwards
+ 
 
+        if get_direction:
+            return theta, direction
+        
         return theta
  
 
