@@ -8,7 +8,7 @@ from lmao.world import World
 from lmao.lidar import Lidar
 import quaternion
 from scipy.spatial.transform import Rotation as R
-from lmao.mapping import get_normals
+from lmao.mapping import Map, get_normals
 from scipy import ndimage
 from scipy.spatial import Delaunay
 from lmao.util.bag_loader import BagLoader
@@ -146,7 +146,7 @@ if __name__ == "__main__":
 	origin = o3d.geometry.PointCloud()
 	origin.points = o3d.utility.Vector3dVector([[2, 3, 0]])
 	origin.colors = o3d.utility.Vector3dVector([[1, 0, 0]])
-	o3d.visualization.draw_geometries([pcd, origin], point_show_normal=True)
+	#o3d.visualization.draw_geometries([pcd, origin], point_show_normal=True)
 
 	# Apply numpy median filter to depth image
 	depth_noisy = ndimage.median_filter(depth_noisy, size=5)
@@ -162,29 +162,40 @@ if __name__ == "__main__":
 	min_depth = np.min(depth)
 	max_depth = np.max(depth)
 	print("Min depth: ", min_depth, "Max depth: ", max_depth)
-	plt.imshow(abs(image))
-	plt.show()
-	plt.imshow(depth)
-	plt.show()
+	# plt.imshow(abs(image))
+	# plt.show()
+	# plt.imshow(depth)
+	# plt.show()
+
+	newmap = Map()
+	mesh = newmap.create_mesh(image, depth)
+
+	o3d.visualization.draw_geometries([mesh])
+
+	exit()
+
 
 
 
 	normal_image = get_normals(image)
+	# Extend image by one pixel up and down
+	normal_image = np.concatenate((normal_image[0:1,:,:], normal_image, normal_image[-1:,:,:]), axis=0)
+	print("Shape of normal_image after extension: ", normal_image.shape)
 
-	# Create matplotlib figure with 2 subplots
-	fig, axs = plt.subplots(2, 1)
+	# # Create matplotlib figure with 2 subplots
+	# fig, axs = plt.subplots(2, 1)
 
-	#plt.imshow(normal_image)
-	axs[0].imshow(abs(normal_image))
-	axs[0].set_title("Normals from gradient")
-	plt.show()
+	# plt.imshow(normal_image)
+	# axs[0].imshow(abs(normal_image))
+	# axs[0].set_title("Normals from gradient")
+	# plt.show()
 
 	# Compare with the normals from the original raycast
 	actual_normals = ans['primitive_normals'].numpy()
 
 	# Show actual normals with matplotlib
-	axs[1].imshow(abs(actual_normals))
-	axs[1].set_title("Actual normals from raycast")
+	# axs[1].imshow(abs(actual_normals))
+	# axs[1].set_title("Actual normals from raycast")
 	plt.show()
 
 	# Remove salt and pepper noise from estimated normals
@@ -193,12 +204,12 @@ if __name__ == "__main__":
 		result[:, :, channel] = ndimage.median_filter(normal_image[:, :, channel], size=3)
 	
 	# Show the result
-	fig, axs = plt.subplots(2, 1)
-	axs[0].imshow(abs(result))
-	axs[0].set_title("Result after median filter")
-	axs[1].imshow(abs(actual_normals))
-	axs[1].set_title("Actual normals from raycast")
-	plt.show()
+	# fig, axs = plt.subplots(2, 1)
+	# axs[0].imshow(abs(result))
+	# axs[0].set_title("Result after median filter")
+	# axs[1].imshow(abs(actual_normals))
+	# axs[1].set_title("Actual normals from raycast")
+	# plt.show()
 
 	# Wrapping image for edges.
 	#result = np.concatenate((result[:, int(result.shape[1]/2):] ,result, result[:, :int(result.shape[1]/2)]), axis=1)
@@ -241,19 +252,27 @@ if __name__ == "__main__":
 
 
 	# Show the mask
-	plt.imshow(mask2)
+	# plt.imshow(mask2)
 	# give a title
-	plt.title("Mask of points that are greater than 500mm in distance")
-	plt.show()
+	# plt.title("Mask of points that are greater than 500mm in distance")
+	# plt.show()
 
 	# Show the mask
-	plt.imshow(mask)
+	# plt.imshow(mask)
 	# give a title
-	plt.title("Mask of points that are not the null vector in the estimated normals")
-	plt.show()
+	# plt.title("Mask of points that are not the null vector in the estimated normals")
+	# plt.show()
 
 	# Combine the two masks
-	mask = np.logical_and(mask, mask2)
+	mask = np.logical_and(mask, np.concatenate((mask2[0:1,:], mask2, mask2[-1:,:]), axis=0))
+
+	# Show the wrapped mask
+	# plt.imshow(mask)
+	# plt.show()
+
+	# Set the top and bottom row in mask to 1
+	mask[0, :] = 1
+	mask[-1, :] = 1
 
 	# Show the wrapped mask
 	plt.imshow(mask)
@@ -261,35 +280,46 @@ if __name__ == "__main__":
 
 	# Perform delaunay triangulation on the points that are not the null vector, using the mask pixel positions as the x and y coordinates
 	tri = Delaunay(np.array(np.nonzero(mask)).T)
+
+	# Perform delaunay triangulation on the points that are not the null vector, x, y and z from the image as the coordinates
+	# I think it will be something like this: tri = Delaunay(image[mask])
+	#tri = Delaunay(image[np.nonzero(mask)].reshape(-1, 3))
+
 	print("Number of triangles: ", len(tri.simplices))
 	print("dtype: ", tri.points.dtype)
 	print("Number of points: ", len(tri.points))
 	print("Max x: ", np.max(tri.points[:, 0]), "Min x: ", np.min(tri.points[:, 0]))
 	print("Max y: ", np.max(tri.points[:, 1]), "Min y: ", np.min(tri.points[:, 1]))
 	# Show the triangulation and the original image in the background
-	plt.imshow(mask)
-	plt.triplot(tri.points[:, 1], tri.points[:, 0],  tri.simplices.copy())
+	#plt.imshow(mask)
+	#plt.triplot(tri.points[:, 1], tri.points[:, 0],  tri.simplices.copy())
 	#plt.plot(tri.points[:, 0], tri.points[:, 1], 'o')
-	plt.show()
+	#plt.show()
 
 	print("Shape of tri.points: ", tri.points.shape)
 	print("Shape of points: ", points.shape)
 
+	print("Shape of tri.simplexes: ", tri.simplices.shape)
+
+
 	vertices = np.array(image[tri.points[:, 0].astype(int), tri.points[:, 1].astype(int), :3] )
-	print("Size of vertices: ", vertices.shape)
-	print("Type of vertices: ", vertices.dtype)
+	#print("Size of vertices: ", vertices.shape)
+	#print("Type of vertices: ", vertices.dtype)
 
 	# Create a triangle mesh from the triangulation
 	mesh = o3d.geometry.TriangleMesh()
 	# Create vertices using the points from the triangulation as indeces to the "points" matrix
 	mesh.vertices = o3d.utility.Vector3dVector(vertices)
+	#mesh.vertices = o3d.utility.Vector3dVector(tri.points)
 	# Create triangles using the simplices from the triangulation
-	mesh.triangles = o3d.utility.Vector3iVector(tri.simplices)
+	mesh.triangles = o3d.utility.Vector3iVector(tri.simplices[:, ])
 	# Add edges
-
 
 	# Paint the mesh in a color defined by the normals
 	mesh.vertex_colors = o3d.utility.Vector3dVector(abs(normal_image[tri.points[:, 0].astype(int), tri.points[:, 1].astype(int)]))
+	#tri_tens = o3d.core.Tensor(np.array(points[1:5]))
+	
+	# Plot 3d points tri.points with matplotlib
 
 
 	# Show the mesh
