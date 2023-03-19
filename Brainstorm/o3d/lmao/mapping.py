@@ -14,23 +14,27 @@ import numpy as np
 from scipy.spatial import Delaunay
 import open3d as o3d
 from scipy import ndimage
+import matplotlib.pyplot as plt
 
 class Map:
 	def __innit__(self):
 		self.mesh = None
 
-	def create_mesh(self, xyz, depth):
+	def create_mesh(self, xyz, depth, threshold=0.25):
 		# Get the normals of the point cloud
 		normal_image = get_normals(xyz)
-		# Extend normal image to include border points
-		normal_image = np.concatenate((normal_image[0:1,:,:], normal_image, normal_image[-1:,:,:]), axis=0)
+
 		# Remove salt and pepper noise from estimated normals # Experimental
 		result = np.zeros_like(normal_image)
 		for channel in range(3):
 			result[:, :, channel] = ndimage.median_filter(normal_image[:, :, channel], size=3)
 
 		# Remove points that are not significantly different from their neighbors
-		clean = remove_significant_differences(result, 0.2)
+		#clean = result
+		clean = remove_significant_differences(result, threshold=threshold)
+
+		# Extend clean image to include border points
+		clean = np.concatenate((clean[0:1,:,:], clean, clean[-1:,:,:]), axis=0)
 
 		# Get a binary mask of the points that are not the null vector in the "clean" image
 		mask = np.logical_and(np.logical_and(clean[:, :, 0] != 0, clean[:, :, 1] != 0), clean[:, :, 2] != 0)
@@ -40,8 +44,9 @@ class Map:
 
 		# Combine the two masks
 		mask = np.logical_and(mask, np.concatenate((mask2[0:1,:], mask2, mask2[-1:,:]), axis=0))
+		# mask = np.logical_and(mask, mask2) # Used when not using the extended clean image
 
-		# Set the top and bottom row in mask to 1
+		# # Set the top and bottom row in mask to 1
 		mask[0, :] = 1
 		mask[-1, :] = 1
 
@@ -51,37 +56,53 @@ class Map:
 		simplices = tri.simplices
 
 		# Remove all tri.points in the top and bottom row
-		points = points[points[:, 0] != 0]
-		points = points[points[:, 0] != mask.shape[0]-1]
+		#points = points[points[:, 0] != 0]
+		points = points[mask.shape[1]:, :]
 
-		# Replace all indexes in tri.simplices to the top row with 0
-		simplices[simplices[:, 0] < mask.shape[0]-1] = 0
-		# Replace all indexes in tri.simplices to the bottom row with 1
-		tri.simplices[tri.simplices[:, 0] == mask.shape[0]-1] = 1
-
-		# Remove all tri.simplices that contain more than one 0 or 1
+		#points = points[points[:, 0] != mask.shape[0]-1]
+		points = points[:-mask.shape[1], :]
 
 		# Remove reference to added border
 		points[:, 0] = points[:, 0] - 1
 
-		# Count how many points have y = 0 or y = - 1
-		count = np.count_nonzero(points[:, 0] == 0)
-		count2 = np.count_nonzero(points[:, 0] == -1)
-
-		print("Number of points with y = 0: ", count)
-		print("Number of points with y = -1: ", count2)
-		
-
-
 		vertices = np.array(xyz[points[:, 0].astype(int), points[:, 1].astype(int), :3] )
 		# Create a triangle mesh from the triangulation
 		mesh = o3d.geometry.TriangleMesh()
+
+		simplices = simplices - 1024
+
+		simplices[simplices >= points.shape[0]] = points.shape[0] + 1
+		simplices[simplices < 0] = points.shape[0]
+
+		# Add vertice of [0, 0, 0.5] and [0, 0, -0.5] to the vertices matrix
+		vertices = np.concatenate((vertices, np.array([[0, 0, 0.1], [0, 0, -0.1]])), axis=0)
+
 		# Create vertices using the points from the triangulation as indeces to the "points" matrix
 		mesh.vertices = o3d.utility.Vector3dVector(vertices)
 		# Create triangles using the simplices from the triangulation
 		mesh.triangles = o3d.utility.Vector3iVector(simplices)
 		# Add edges
 		mesh.vertex_colors = o3d.utility.Vector3dVector(abs(normal_image[points[:, 0].astype(int), points[:, 1].astype(int)]))
+
+		print("Shape of points: ", points.shape)
+		print("Shape of simplices: ", simplices.shape)
+		print("Max simplices: ", np.max(simplices))
+		print("Min simplices: ", np.min(simplices))
+		# Plot delanauy triangulation
+		# Remove all simplices that refer to points.shape[0] - 1 or points.shape[0] - 2
+		#simplices = simplices[simplices[:, 0] != vertices.shape[0] - 1]
+		simplices = simplices[np.logical_and(np.logical_and(simplices[:, 0] < points.shape[0], simplices[:, 1] < points.shape[0]), simplices[:, 2] < points.shape[0])]
+		#simplices = simplices[simplices[:, 1] != vertices.shape[0] - 2]
+
+
+		print("Shape of points: ", points.shape)
+		print("Shape of simplices: ", simplices.shape)
+		print("Max simplices: ", np.max(simplices))
+		print("Min simplices: ", np.min(simplices))
+
+		plt.triplot(points[:, 1], points[:, 0], simplices)
+		plt.plot(points[:, 1], points[:, 0], 'o')
+		plt.show()
 		
 		return mesh
 

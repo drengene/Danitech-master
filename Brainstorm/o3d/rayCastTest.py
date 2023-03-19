@@ -172,6 +172,7 @@ if __name__ == "__main__":
 
 	o3d.visualization.draw_geometries([mesh])
 
+
 	exit()
 
 
