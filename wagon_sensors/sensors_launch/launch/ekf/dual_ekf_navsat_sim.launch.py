@@ -61,7 +61,7 @@ def generate_launch_description():
                         ('gps/fix', 'gps'), # The subscribed gps topic
                         ('gps/filtered', 'gps/filtered'), # The topic to publish the filtered gps data to
                         ('odometry/gps', 'odometry/gps'), # The topic to publish the gps odometry data to
-                        ('odometry/filtered', 'odometry/global'), # The subscribed odometry topic
+                        ('odometry/filtered', 'odometry/local'), # The subscribed odometry topic
             ]
            )           
 ])

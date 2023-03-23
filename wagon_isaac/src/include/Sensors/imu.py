@@ -21,6 +21,7 @@ from rclpy.node import Node
 from omni.isaac.ros2_bridge import _ros2_bridge
 
 from sensor_msgs.msg import Imu
+from numpy import array as nparray
 
 # enable ROS2 bridge extension
 extensions.enable_extension("omni.isaac.ros2_bridge")
@@ -45,6 +46,10 @@ class IMU(Node):
 
 
         self.imu_pub = self.create_publisher(Imu, "imu", 10)
+
+        self.Covariance = nparray([0.01, 0, 0,
+                                    0, 0.01, 0,
+                                    0, 0, 0.01,])
 
         #self.timer = self.create_timer(0.05, self.imu_callback)
 
@@ -72,6 +77,10 @@ class IMU(Node):
             imu_msg.linear_acceleration.x = float(reading[1])
             imu_msg.linear_acceleration.y = float(reading[2])
             imu_msg.linear_acceleration.z = float(reading[3])
+            imu_msg.orientation_covariance = self.Covariance
+            imu_msg.angular_velocity_covariance = self.Covariance
+            imu_msg.linear_acceleration_covariance = self.Covariance
+
 
             self.imu_pub.publish(imu_msg)
 

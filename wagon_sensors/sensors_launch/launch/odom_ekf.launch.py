@@ -37,7 +37,7 @@ def generate_launch_description():
     config_arg = DeclareLaunchArgument(name='config', default_value=parameters_file_path,
                                     description='Path to ekf config file')
     
-    sim_arg = DeclareLaunchArgument(name='sim', default_value='false')
+    sim_arg = DeclareLaunchArgument(name='sim_arg', default_value='false')
 
 
     wheel_odom_node = Node(
@@ -61,14 +61,14 @@ def generate_launch_description():
             os.path.join(sensors_launch_pkg, 'launch', 'ekf', 'imu_twist.launch.py')),
         launch_arguments={
         }.items(),
-        condition = UnlessCondition(LaunchConfiguration('sim'))
+        condition = UnlessCondition(LaunchConfiguration('sim_arg'))
     )
     ekf_launch_sim = IncludeLaunchDescription(
         PythonLaunchDescriptionSource(
             os.path.join(sensors_launch_pkg, 'launch', 'ekf', 'dual_ekf_navsat_sim.launch.py')),
         launch_arguments={
         }.items(),
-        condition = IfCondition(LaunchConfiguration('sim'))
+        condition = IfCondition(LaunchConfiguration('sim_arg'))
     )
 
     return LaunchDescription([

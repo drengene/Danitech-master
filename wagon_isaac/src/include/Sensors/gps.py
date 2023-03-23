@@ -24,7 +24,7 @@ class gps_pub(Node):
         sim_time = self.sim_context.current_time
         gps_msg.header.stamp.sec = int(sim_time)
         gps_msg.header.stamp.nanosec = int((sim_time - int(sim_time)) * 1e9)
-        gps_msg.header.frame_id = "gps"
+        gps_msg.header.frame_id = "rtk_pole"
         gps_msg.status.status = NavSatStatus.STATUS_FIX
         gps_msg.status.service = NavSatStatus.SERVICE_GPS
         gps_msg.latitude = float(self.rtk_prim.GetAttribute("xformOp:translate").Get()[0] + self.lat)

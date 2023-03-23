@@ -380,7 +380,7 @@ def main():
 
     joint_states = joint_state_pub("wagon")
     gps_module = gps_pub( isaac_sim.wagon_prim_path + "/rtk_pole", init_lat=55.471650, init_lon=10.328990)
-    pose_publisher = pose_pub(isaac_sim.wagon_prim_path + "/base_link", "base_link")
+    pose_publisher = pose_pub(isaac_sim.wagon_prim_path + "/base_link", "odom")
     i = 0
 
     isaac_sim.play_world()
@@ -396,17 +396,16 @@ def main():
             isaac_sim.pub_sim_time()
             rclpy.spin_once(isaac_sim, timeout_sec=0.005)
             
-            #imu_scan.ros_pub()
+            imu_scan.ros_pub()
             imu_rear.ros_pub()
 
 
             #print("time: ", time.time() - time_now)
             
             #if i > 300:
-            if i % 20 == 0:
-                gps_module.pub_gps_data()
 
             if i % 6 == 0:
+                gps_module.pub_gps_data()
                 lidar_sim.ros_pub()
                 
             pose_publisher.ros_pub()

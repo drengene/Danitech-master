@@ -4,7 +4,7 @@ from rclpy.node import Node
 from sensor_msgs.msg import JointState
 import numpy as np
 #Import twist
-from geometry_msgs.msg import TwistWithCovarianceStamped
+from geometry_msgs.msg import TwistWithCovarianceStamped, TwistStamped
 
 class WheelOdometry(Node):
 	def __init__(self):
@@ -37,6 +37,7 @@ class WheelOdometry(Node):
 
 		# Create publisher for wheel odometry
 		self.publisher = self.create_publisher(TwistWithCovarianceStamped, self.wheel_odom_topic, 10)
+		# self.publisher = self.create_publisher(TwistStamped, self.wheel_odom_topic, 10)
 
 		self.config_index = False
 
@@ -55,10 +56,13 @@ class WheelOdometry(Node):
 			hydraulic_joint_pos = msg.position[self.hydraulic_joint]
 			# Compute the wheel odometry
 			wheel_odom_front = TwistWithCovarianceStamped()
+			# wheel_odom_front = TwistStamped()
+
 			wheel_odom_front.header = msg.header
 			wheel_odom_front.header.frame_id = 'base_link'
 
 			wheel_odom_rear = TwistWithCovarianceStamped()
+			# wheel_odom_rear = TwistStamped()
 			wheel_odom_rear.header = msg.header
 			wheel_odom_rear.header.frame_id = 'rear_link'
 
@@ -66,9 +70,19 @@ class WheelOdometry(Node):
 			wheel_odom_front.twist.twist.linear.x = (wheel_fl_vel + wheel_fr_vel) * self.wheel_radius / 2
 			wheel_odom_front.twist.twist.angular.z = -(wheel_fl_vel - wheel_fr_vel) * self.wheel_radius / self.front_wheel_separation
 
+			# for twist stamped
+			#wheel_odom_front.twist.linear.x = (wheel_fl_vel + wheel_fr_vel) * self.wheel_radius / 2
+			#wheel_odom_front.twist.angular.z = -(wheel_fl_vel - wheel_fr_vel) * self.wheel_radius / self.front_wheel_separation
+
+
 			# Compute the rear wheel odometry
 			wheel_odom_rear.twist.twist.linear.x = (wheel_rl_vel + wheel_rr_vel) * self.wheel_radius / 2
 			wheel_odom_rear.twist.twist.angular.z = -(wheel_rl_vel - wheel_rr_vel) * self.wheel_radius / self.rear_wheel_separation
+
+			# for twist stamped
+			#wheel_odom_rear.twist.linear.x = (wheel_rl_vel + wheel_rr_vel) * self.wheel_radius / 2
+			#wheel_odom_rear.twist.angular.z = -(wheel_rl_vel - wheel_rr_vel) * self.wheel_radius / self.rear_wheel_separation
+
 
 			Covariance = np.array([1e-2, 0, 0, 0, 0, 0,
 							0, 1e-2, 0, 0, 0, 0,

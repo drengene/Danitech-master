@@ -15,6 +15,7 @@ def generate_launch_description():
     sensors_launch_pkg = get_package_share_directory('sensors_launch')
 
     use_sim_time = LaunchConfiguration('use_sim_time', default= 'true')
+
     use_ekf = LaunchConfiguration('use_ekf', default= 'true')
 
     urdf_file_name = 'wagon.urdf'
@@ -31,6 +32,11 @@ def generate_launch_description():
             default_value='true',
             description='Use simulation (Gazebo) clock if true')
 
+    pub_world = DeclareLaunchArgument(
+            'pub_world',
+            default_value='true',
+            description='Publish world tf if true')
+    
     ekf_arg = DeclareLaunchArgument(
             'use_ekf',
             default_value='true',
@@ -57,7 +63,7 @@ def generate_launch_description():
             executable='world_tf_pub',
             name='world_tf_pub',
             output='screen',
-            condition=IfCondition(LaunchConfiguration('use_sim_time')),
+            condition=IfCondition( LaunchConfiguration('pub_world'))
 
     )
 
