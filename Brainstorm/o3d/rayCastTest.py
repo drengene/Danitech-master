@@ -1,4 +1,5 @@
 import open3d as o3d
+import lmao.util.open3d_tutorial as o3dtut
 
 import numpy as np
 import matplotlib.pyplot as plt
@@ -12,6 +13,7 @@ from lmao.mapping import Map, get_normals
 from scipy import ndimage
 from scipy.spatial import Delaunay
 from lmao.util.bag_loader import BagLoader
+from lmao.util.mesh_test import check_properties
 
 
 def convert_to_cv2_image(depth, funnycolor=False, normalize=False):
@@ -62,6 +64,8 @@ def remove_significant_differences_noangle(original_array, threshold):
 			if np.all(distance < threshold):
 				result_array[i, j] = null_vector
 	return result_array
+
+
 
 
 if __name__ == "__main__":
@@ -168,9 +172,37 @@ if __name__ == "__main__":
 	# plt.show()
 
 	newmap = Map()
+	t0 = time()
 	mesh = newmap.create_mesh(image, depth)
+	t1 = time()
+	print("Time to create mesh: ", t1-t0)
+	print("Number of vertices: ", len(mesh.vertices))
+	print("Number of triangles: ", len(mesh.triangles))
 
-	o3d.visualization.draw_geometries([mesh])
+	points = np.asarray(mesh.vertices)
+
+	check_properties("er", mesh)
+
+	print("Length of non manifold vert", len(mesh.get_non_manifold_vertices()))
+
+	non_manifold = mesh.get_non_manifold_vertices()
+	non_manifold_pcd = o3d.geometry.PointCloud()
+
+	print("Non-manifold points:", points[non_manifold])
+
+	# Create pointcloud of non manifold vertices
+	
+	non_manifold_pcd.points = o3d.utility.Vector3dVector(points[non_manifold])
+	non_manifold_pcd.paint_uniform_color([1, 0, 0])
+
+	o3d.visualization.draw_geometries([non_manifold_pcd])
+
+
+	o3d.visualization.draw_geometries([mesh, non_manifold_pcd], lookat = np.array(np.float64([ -0.5385805773511031, -2.7543633327825869, -0.50953180767962569 ])), 
+                                  up = np.array(np.float64([ 0.0, 0.0, 1 ])), 
+                                  front = np.array(np.float64([ 0.84732198172019557, -0.52728541423993913, 0.063368377157510217 ])), zoom = 0.16 )
+
+	
 
 
 	exit()
