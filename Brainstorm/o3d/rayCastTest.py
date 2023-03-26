@@ -161,7 +161,7 @@ if __name__ == "__main__":
 	# Transform depth points to world coordinates.
 	image = rotated[:,:,:3] + depth_noisy[:,:,np.newaxis]*rotated[:,:,3:]
 	
-	bagloader = BagLoader(bagpath = '/home/junge/Documents/rosbag2_2023_03_09-15_53_39',topics = ['/points'])
+	bagloader = BagLoader(bagpath = '/home/junge/Documents/rosbag2_sim_lidar_odom_tf/',topics = ['/points'])
 	image, depth = bagloader.get_pointcloud('/points')
 	min_depth = np.min(depth)
 	max_depth = np.max(depth)
@@ -181,7 +181,7 @@ if __name__ == "__main__":
 
 	points = np.asarray(mesh.vertices)
 
-	check_properties("er", mesh)
+	#check_properties("er", mesh)
 
 	print("Length of non manifold vert", len(mesh.get_non_manifold_vertices()))
 

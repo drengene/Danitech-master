@@ -31,7 +31,7 @@ xyz = xyz.reshape(-1, 3)
 normals = normals.reshape(-1, 3)
 # Remove points that have [0, 0, 0] as normal
 xyz = xyz[normals[:, 0] != 0]
-normals = -normals[normals[:, 0] != 0]
+normals = normals[normals[:, 0] != 0]
                   
 pcd = o3d.t.geometry.PointCloud(xyz)
 
@@ -63,10 +63,10 @@ o3d.visualization.draw_geometries([pcd])
 
 t0 = time.time()
 mesh, densities = o3d.geometry.TriangleMesh.create_from_point_cloud_poisson(
-        pcd, depth=9, n_threads=4)
+        pcd, depth=9, n_threads=0)
 t1 = time.time()
 
-check_properties("Poisson", mesh)
+#check_properties("Poisson", mesh)
 
 print("Time to create mesh with Poisson: ", t1-t0)
 print("Number of vertices: ", len(mesh.vertices))

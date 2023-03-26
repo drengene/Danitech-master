@@ -203,11 +203,8 @@ def remove_significant_differences_faster(original_array, threshold):
 	# calculate the distances between the original pixel and its neighbors
 	neighbor_distances = np.linalg.norm(shifted_arrays - original_array, axis=-1)
 
-	# print("neighbor_distances.shape: ", neighbor_distances.shape)
 	# check if all the distances are below the threshold
-	# print(neighbor_distances)
 	neighbor_distances = np.all(neighbor_distances < threshold, axis=0)
-	# print("neighbor_distances shape: ", neighbor_distances.shape)
 
 	# set the original pixel to the null vector if all the distances are below the threshold
 	original_array[neighbor_distances] = np.zeros((3,))

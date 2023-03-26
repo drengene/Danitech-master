@@ -8,6 +8,28 @@ import numpy as np
 import matplotlib.pyplot as plt
 import open3d as o3d
 
+DATATYPE_SIZE = {
+    PointField.INT8: 1,
+    PointField.UINT8: 1,
+    PointField.INT16: 2,
+    PointField.UINT16: 2,
+    PointField.INT32: 4,
+    PointField.UINT32: 4,
+    PointField.FLOAT32: 4,
+    PointField.FLOAT64: 8,
+}
+
+DATATYPE_NPDTYPE = {
+    PointField.INT8: np.int8,
+    PointField.UINT8: np.uint8,
+    PointField.INT16: np.int16,
+    PointField.UINT16: np.uint16,
+    PointField.INT32: np.int32,
+    PointField.UINT32: np.uint32,
+    PointField.FLOAT32: np.float32,
+    PointField.FLOAT64: np.float64,
+}
+
 class LoadRosbag:
     def __init__(self, bagpath, topics = []):
         self.bagpath = bagpath
@@ -26,9 +48,6 @@ class LoadRosbag:
                 yield msg
 
 
-
-
-
 def main(args=None):
     rclpy.init(args=args)
 
@@ -40,35 +59,40 @@ def main(args=None):
             print(connection.topic, connection.msgtype)
         # iterate over messages
         for connection, timestamp, rawdata in reader.messages():
-            msg = deserialize_cdr(rawdata, connection.msgtype)
-            print(msg.header)
+            if connection.msgtype == "sensor_msgs/msg/PointCloud2":
+                msg = deserialize_cdr(rawdata, connection.msgtype)
+                print(msg.point_step)
+                print(msg.data.shape[0])
 
-            # Now this data is a PointCloud2. Let's load it into a numpy array
-            array_orig = np.frombuffer(msg.data, dtype=np.uint32)
-            array_orig = array_orig.reshape(msg.height, msg.width, -1)
-            # Discard other than x,y,z
-            array = array_orig[:, :, 8].copy()
-            #print(tiny_array.shape)
-            # Convert to open3d
-            #pcd = o3d.geometry.PointCloud()
-            #pcd.points = o3d.utility.Vector3dVector(array.reshape(-1, 3))
-            #o3d.visualization.draw_geometries([pcd])
+                data = msg.data
+                print(msg.fields)
 
-            # Circularly shift every second row by 10 pixels
-            array[0::4, :] = np.roll(array[0::4, :], -16, axis=1)
-            array[1::4, :] = np.roll(array[1::4, :], -32, axis=1)
-            array[2::4, :] = np.roll(array[2::4, :], -48, axis=1)
-            array[3::4, :] = np.roll(array[3::4, :], -64, axis=1)
+                # Reshape data such that every row is a point
+                data = data.reshape(-1, msg.point_step)
+                print("Shape of data: ", data.shape)
+                data_dict = {}
 
-            fig, axs = plt.subplots(2, 1)
-            axs[0].imshow(array_orig[:,:,8])
-            axs[1].imshow(array)
+                for field in msg.fields:
+                    data_dict[field.name] = 1
+                    # Get datatype size
+                    datatype_size = DATATYPE_SIZE[field.datatype]
+                    datatype_npdtype = DATATYPE_NPDTYPE[field.datatype]
+                    # Extract data
+                    data_dict[field.name] = np.frombuffer(data[:, field.offset:field.offset+datatype_size].copy(), dtype=datatype_npdtype).reshape(msg.height, msg.width, -1)
+                    # Print
+                    print(field.name, field.offset, field.datatype, datatype_size)
 
-            plt.show()
+                print(data_dict.keys())
 
+                plt.imshow(data_dict['range'])
+                plt.show()
 
-
-            exit()
+                # Plot xyz
+                fig, axs = plt.subplots(3, 1)
+                axs[0].imshow(data_dict['x'])
+                axs[1].imshow(data_dict['y'])
+                axs[2].imshow(data_dict['z'])
+                plt.show()
             
 
 if __name__ == '__main__':
