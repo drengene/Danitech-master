@@ -14,8 +14,10 @@ import quaternion
 import cv2
 from scipy.spatial.transform import Rotation as R
 
+import json
 
-class Lidar:
+
+class Virtual_Lidar:
 	def __init__(self, horizontal_lines=64, rays_per_line=1024, vertical_fov = np.pi/2):
 		self.horizontal_lines = horizontal_lines
 		self.rays_per_line = rays_per_line
@@ -137,3 +139,33 @@ class Lidar:
 			return self.rays
 		else:
 			return self.rays + np.random.normal(0, noise_std, self.rays.shape)
+		
+
+class Lidar:
+	def __init__(self, config_file):
+		# Load config json file from path 
+		with open(config_file) as f:
+			self.config = json.load(f)
+
+
+	def unstagger(self, data):
+		# Check if data is a dictionary
+		if isinstance(data, dict):
+			for key, value in data.items():
+				data[key] = self.unstagger(value)
+			return data
+		# Check if data is a list
+		elif isinstance(data, list):
+			for i, value in enumerate(data):
+				data[i] = self.unstagger(value)
+			return data
+		# Check if data is a numpy array
+		elif isinstance(data, np.ndarray):
+			rolled = np.empty_like(data)
+			# Assert that data.shape[0] is similar to config "pixel_shift_by_row"
+			assert data.shape[0] == len(self.config["data_format"]["pixel_shift_by_row"])
+			for i in range(data.shape[0]):
+				rolled[i] = np.roll(data[i], self.config["data_format"]["pixel_shift_by_row"][i])
+			return rolled
+
+	

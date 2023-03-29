@@ -21,7 +21,8 @@ setup(
     entry_points={
         'console_scripts': [
             'wheel_odom = wheel_odometry.wheel_odom:main',
-            'odom_tester = wheel_odometry.odom_tester:main'
+            'odom_tester = wheel_odometry.odom_tester:main',
+            'pointcloud = wheel_odometry.pointcloud:main'
         ],
     },
 )
