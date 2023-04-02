@@ -1,8 +1,8 @@
 import numpy as np
 import matplotlib.pyplot as plt
 import open3d as o3d
-import lmao.lidar as Lidar
-import lmao.util.pclmao as pclmao
+import lmao_lib.lidar as Lidar
+import lmao_lib.util.pclmao as pclmao
 
 from scipy.spatial.transform import Rotation as R
 
@@ -28,14 +28,12 @@ from tf2_ros.transform_listener import TransformListener
 
 # Define the class for the raycast localization node
 class RaycastLocalization(Node):
-    def __init__(self, map, lidar, max_range, resolution, max_iterations, threshold):
+    def __init__(self, map, max_range, resolution, max_iterations):
         super().__init__('raycast_localization')
         self.map = map
-        self.lidar = lidar
         self.max_range = max_range
         self.resolution = resolution
         self.max_iterations = max_iterations
-        self.threshold = threshold
         points = []
         self.pos = np.array([0, 0, 0])
         self.orientation = np.array([0, 0, 0, 0])
@@ -60,6 +58,7 @@ class RaycastLocalization(Node):
 
         # Create publisher
         self.odom_pub = self.create_publisher(Odometry, self.odom_topic, 10)
+        self.rviz_pub = self.create_publisher(PointCloud2, "/rviz_pcl", 10)
 
         # Create tf2 buffer and listener
         self.tf_buffer = Buffer()
@@ -100,10 +99,24 @@ class RaycastLocalization(Node):
         pc.header.stamp = msg.header.stamp
         self.lidar_pub.publish(pc)
 
-
     
     def load_map(self, map_path):
         self.map = o3d.io.read_triangle_mesh(map_path)
 
     def save_map(self, map_path):
         o3d.io.write_triangle_mesh(map_path, self.map)
+
+
+def main(args=None):
+    localizer = RaycastLocalization(map=None, max_range=10, resolution=0.1, max_iterations=10)
+    rclpy.spin(localizer)
+
+    # Destroy the node explicitly
+    # (optional - otherwise it will be done automatically
+    # when the garbage collector destroys the node object)
+    localizer.destroy_node()
+    rclpy.shutdown()
+
+if __name__ == '__main__':
+    main()
+
