@@ -1,0 +1,24 @@
+Related work
+Vi har kigget tværfagligt. 
+
+Det gode speciale, egner sig godt til et konferencepaper.
+Vi skal altså bidrage et eller andet sted, hvor vi gør noget anderledes.
+
+Metodeafsnit med
+Implementering i ros
+Simulering
+
+100 sider er upper limit (XD)
+Enkeltmand er typsik 50 +-20
+
+Vi skal gerne vise at vi har indsigt i litteraturen, og at vi kan tilegne os ny viden.
+At vi kan sætte forsøg op, og rent faktisk kan implementere noget.
+
+Vi skal kun gå dybt ind i nogle ting, helst det relevante, og især det vi har lavet selv..
+Men vi kan godt også grave lidt dybere i bærende dele af projektet, som f.eks. kunne være poisson rekonstruktion, hvis vi konkluderer at det er vigtigt (Hint: Det er det ikke nødvendigvis.)
+
+Husk den røde tråd! Det som er vigtigt for den røde tråd, kan man godt bruge mere krudt på.
+Vi skal nok ikke regne med at skrive en stil om ros, f.eks.... 
+
+Vi skal også tage forskel på hvad vi har tilejnet os, kontra hvad vi vidste i forvejen. 
+Vi kan altså godt skrive en sektion om Isaac sim, da vi ikke kendte det i forvejen. 

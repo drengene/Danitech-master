@@ -1,6 +1,8 @@
 from setuptools import setup
+import os
+from glob import glob
 
-package_name = 'wheel_odometry'
+package_name = 'lmao'
 
 setup(
     name=package_name,
@@ -9,20 +11,19 @@ setup(
     data_files=[
         ('share/ament_index/resource_index/packages',
             ['resource/' + package_name]),
-        ('share/' + package_name, ['package.xml']),
+        ('share/' + package_name, ['package.xml'])
+
     ],
     install_requires=['setuptools'],
     zip_safe=True,
-    maintainer='Rasmus Junge',
+    maintainer='junge',
     maintainer_email='mail@raju.dk',
     description='TODO: Package description',
     license='TODO: License declaration',
     tests_require=['pytest'],
     entry_points={
         'console_scripts': [
-            'wheel_odom = wheel_odometry.wheel_odom:main',
-            'odom_tester = wheel_odometry.odom_tester:main',
-            'pointcloud = wheel_odometry.pointcloud:main'
+            'RaycastLocalization = lmao.RaycastLocalization:main'
         ],
     },
 )
