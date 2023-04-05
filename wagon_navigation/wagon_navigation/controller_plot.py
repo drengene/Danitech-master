@@ -1,8 +1,10 @@
 import glob
 import os
 import matplotlib.pyplot as plt
+from scipy.interpolate import CubicSpline, Rbf
 import pickle
 import numpy as np
+
 
 def load_latest_file(folder_path):
     # get a list of all the files in the folder
@@ -45,7 +47,72 @@ def poly_fit_plot(base_pose, wayposes):
     # create a 3D plot of basepose_fit and waypose_fit
     fig = plt.figure()
     ax = fig.add_subplot(111, projection='3d')
+
     
+
+    ax.plot(base_x, base_y, base_z, c='r', alpha=0.5)
+    ax.plot(way_x, way_y, way_z, c='b', alpha=0.5)
+
+     # set the axis labels
+    ax.set_xlabel('X Label')
+    ax.set_ylabel('Y Label')
+    ax.set_zlabel('Z Label')
+
+    # add legend
+    ax.legend(['base_pose', 'wayposes'])
+    # show the plot
+    plt.show()
+    
+
+
+def calc_rme(base_pose, wayposes):
+    # Calculate the displacement between the two paths
+    interpolated_path = interpolate_points(wayposes, np.shape(base_pose)[0])
+
+    displacement = base_pose - interpolated_path
+
+    # Calculate the squared Euclidean distance between each displacement vector
+    squared_distances = np.sum(displacement**2, axis=1)
+
+    # Calculate the mean of the squared distances
+    mean_squared_distance = np.mean(squared_distances)
+
+    # Calculate the RMSE
+    rmse = np.sqrt(mean_squared_distance)
+
+    print("RMSE:", rmse)
+
+    return rmse
+
+
+def interpolate_points(points, num_points):
+            
+    # Concatenate the points to form a 3x3 array
+    # points = np.array([p1, p2, p3])
+
+    # Calculate the distances between each pair of points
+    distances = np.sqrt(np.sum(np.diff(points, axis=0)**2, axis=1))
+
+    # Calculate the cumulative distance along the curve
+    cumulative_distances = np.cumsum(distances)
+    cumulative_distances = np.insert(cumulative_distances, 0, 0) # Add initial distance of 0
+
+    # Create a cubic spline interpolation of the points
+    interp = CubicSpline(cumulative_distances, points, bc_type='not-a-knot')
+
+    # Generate points along the curve at the specified resolution
+    s_vals = np.linspace(cumulative_distances[0], cumulative_distances[-1], num_points)
+
+    # for idx, dist in enumerate(cumulative_distances[:-1], ):
+    #     num_points = int(np.ceil((cumulative_distances[idx + 1] - dist)/resolution))
+    #     # print(num_points)
+    #     s_val = np.linspace(dist, cumulative_distances[idx + 1], num_points)
+    #     s_vals = np.append(s_vals, s_val[1:])
+
+    # Generate 10 points along the curve
+    interp_points = interp(s_vals)
+
+    return interp_points
 
 
 def scatter_plot(base_pose, wayposes):
@@ -58,8 +125,11 @@ def scatter_plot(base_pose, wayposes):
     # plot the base poses as red circles
     ax.scatter(base_pose[:,0], base_pose[:,1], base_pose[:,2], c='r', marker='o')
 
-    # plot the wayposes as blue triangles
+    # plot the wayposes as numbered blue triangles
     ax.scatter(wayposes[:,0], wayposes[:,1], wayposes[:,2], c='b', marker='^')
+    for i, (x, y, z) in enumerate(zip(base_pose[:,0], base_pose[:,1], base_pose[:,2])):
+        if i % 100 == 0:
+            ax.text(x, y, z, str(i), color="red", fontsize=12)
 
     # set the axis labels
     ax.set_xlabel('X Label')
@@ -70,16 +140,36 @@ def scatter_plot(base_pose, wayposes):
     plt.show()
 
 
+def find_first_closes_point(base_pose, wayposes):
+    diff_old = np.inf
+    for i in range(len(wayposes)):
+        diff = np.linalg.norm(wayposes[0,0:3] - base_pose[i])
+        # print("diff:", diff)
+        if diff > diff_old:
+            print("diff: ", diff, "diff_old: ", diff_old, "i: ", i)
+        diff_old = diff
+
 # specify the folder path where your pickle files are stored
-folder_path = '/home/danitech/master_ws/src/Danitech-master/wagon_navigation/wagon_navigation/pose_data/'
+folder_path = '/home/daniel/master_ws/src/Danitech-master/wagon_navigation/wagon_navigation/pose_data/'
 
 # load the latest file in the folder
 data = load_latest_file(folder_path)
-
 # extract the data you need
 base_pose = data['base_pose']
+base_or = data['base_or']
 wayposes = data['wayposes']
 
-#print(len(wayposes))
+print(wayposes[0,:])
 
+# combinethe first element of base pose and base or to get the first base pose
+first_pose = np.concatenate((base_pose[0,:], base_or[0,:]))
+
+wayposes[0,:] = first_pose
+print(wayposes[0,:])
+# print(wayposes)
+#print(len(wayposes))
+print("first closest point:", find_first_closes_point(base_pose, wayposes))
+
+calc_rme(base_pose, wayposes[:,0:3])
 poly_fit_plot(base_pose, wayposes)
+#scatter_plot(base_pose, wayposes)
