@@ -28,6 +28,7 @@ class BagLoader:
 		#    for connection in reader.connections:
 		#        if connection.topic in self.topics:
 		#            self.connections.append(connection)        
+		self.pixel_shift_1024x10 = [64,43,23,3,63,43,23,4,62,42,23,4,61,42,24,5,60,42,24,6,59,41,24,6,59,41,24,7,58,41,24,7,58,41,24,8,57,41,24,8,57,41,24,8,57,40,24,8,56,40,24,8,56,40,24,8,56,40,24,8,56,40,24,8,56,40,24,8,56,40,24,8,56,40,24,8,56,40,24,8,56,40,24,8,56,40,24,7,56,40,23,7,56,40,23,6,57,40,23,6,57,40,23,5,57,40,23,5,58,40,22,4,58,40,22,3,59,40,22,2,60,41,21,1,61,41,21,0]
 
 	def get_messages(self, topic):
 		for connection, timestamp, rawdata in self.connections:
@@ -42,8 +43,51 @@ class BagLoader:
 		for connection, timestamp, rawdata in self.reader.messages():
 			if connection.topic == topic:
 				msg = deserialize_cdr(rawdata, connection.msgtype)
+				point_step = msg.point_step
+				row_step = msg.row_step
 				# dtype_list = [(field.name, np.dtype(self.datatype_dict[field.datatype])) for field in msg.fields]
-				print(np.shape(msg.data))
+				print(np.shape(msg.data.reshape(msg.height, msg.width, -1)))
+				
+				xyz = np.frombuffer(msg.data, dtype=np.float32).reshape(msg.height, msg.width, -1)[:,:,:3].copy()
+				depth = np.frombuffer(msg.data, dtype=np.uint32).reshape(msg.height, msg.width, -1)[:,:,8].copy()
+
+				print
+
+				# shift every row with the pixel shift
+				for i in range(0, 128):
+					xyz[i, :] = np.roll(xyz[i, :], -self.pixel_shift_1024x10[i], axis=0)
+					depth[i, :] = np.roll(depth[i, :], -self.pixel_shift_1024x10[i], axis=0)
+
+
+
+
+				#array = point_cloud.reshape(msg.height, msg.width, -1).copy()
+				# roll_factor = 17 # The image loads in kinda weird, so we need to roll it a bit
+				# xyz[0::4, :] = np.roll(xyz[0::4, :], -int(roll_factor), axis=1)
+				# depth[0::4, :] = np.roll(depth[0::4, :], -roll_factor, axis=1)
+				# xyz[1::4, :] = np.roll(xyz[1::4, :], -int(2*roll_factor), axis=1)
+				# depth[1::4, :] = np.roll(depth[1::4, :], -int(2*roll_factor), axis=1)
+				# xyz[2::4, :] = np.roll(xyz[2::4, :], -int(3*roll_factor), axis=1)
+				# depth[2::4, :] = np.roll(depth[2::4, :], -int(3*roll_factor), axis=1)
+				# xyz[3::4, :] = np.roll(xyz[3::4, :], -int(4*roll_factor), axis=1)
+				# depth[3::4, :] = np.roll(depth[3::4, :], -int(4*roll_factor), axis=1)
+
+
+				self.reader.close() # Probably not the correct place to close the reader
+				# print("Field names: ", msg.fields)
+				return xyz, depth
+			
+	def get_sim_pointcloud(self, topic):
+		
+		self.reader.open()
+		#dtypes = np.dtype([('x', np.float32), ('y', np.float32), ('z', np.float32), ('intensity', np.float32), ('t', np.uint32), ('reflectivity', np.uint16) ('ring', np.uint8), ('ambient', np.uint16), ('range', np.uint32)])
+		for connection, timestamp, rawdata in self.reader.messages():
+			if connection.topic == topic:
+				msg = deserialize_cdr(rawdata, connection.msgtype)
+				# dtype_list = [(field.name, np.dtype(self.datatype_dict[field.datatype])) for field in msg.fields]
+				print(np.shape(msg.data.reshape(msg.height, msg.width, -1)))
+				print("height: ", msg.height)
+				print("width: ", msg.width)
 				xyz = np.frombuffer(msg.data, dtype=np.float32).reshape(msg.height, msg.width, -1)[:,:,:3].copy()
 				depth = np.frombuffer(msg.data, dtype=np.uint32).reshape(msg.height, msg.width, -1)[:,:,8].copy()
 				#array = point_cloud.reshape(msg.height, msg.width, -1).copy()

@@ -366,7 +366,7 @@ def main():
 
     isaac_sim.set_params()
 
-    #lidar = lidar_3d("/lidar", "/wagon/base_scan", "Example_Rotary")
+    #lidar = lidar_3d("/lidar", isaac_sim.wagon_prim_path + "/base_scan", "Example_Rotary")
     lidar_sim = lidar("/lidar", isaac_sim.wagon_prim_path + "/base_scan")
     time.sleep(1)
 

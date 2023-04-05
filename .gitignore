@@ -4,3 +4,5 @@
 *.pdf
 *.gv
 *.bt
+*.obj
+*.ply
