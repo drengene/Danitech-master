@@ -16,12 +16,15 @@ from scipy.spatial.transform import Rotation as R
 from scipy.interpolate import CubicSpline, Rbf
 from copy import deepcopy
 from time import sleep
+import pickle
+import datetime
 
 import numpy as np
 
 
 FORWARDS = 1
 BACKWARDS = -1
+MAX_VEL = 4
 
 class articulationController(Node):
     
@@ -32,7 +35,7 @@ class articulationController(Node):
         self.declare_parameter('cmd_vel_topic', '/cmd_vel', ParameterDescriptor(description="Command velocity topic name"))
         self.declare_parameter('base_link_frame', 'base_link', ParameterDescriptor(description="Base link frame name"))
         self.declare_parameter('odom_frame', 'odom', ParameterDescriptor(description="Odometry frame name"))
-        self.declare_parameter('world_frame', 'world', ParameterDescriptor(description="World frame name"))
+        self.declare_parameter('world_frame', 'odom', ParameterDescriptor(description="World frame name"))
 
         self.cmd_vel_topic = self.get_parameter('cmd_vel_topic').value
         # self.joint_state_topic = self.get_parameter('joint_state_topic').value
@@ -41,19 +44,22 @@ class articulationController(Node):
         self.world_frame = self.get_parameter('world_frame').value
 
         # declare parameters from the parameters above
+        self.base_poses = np.array([0, 0, 0])
+        self.base_orrientations = np.array([0, 0, 0, 0])
+        self.twist_msgs = np.array([0, 0])
 
         self.tf_buffer = Buffer()
         self.tf_listener = TransformListener(self.tf_buffer, self)
         
         self.secs = 0
         self.nanosecs = 0
-        manual = False
+        manual = True
         self.old_dist = np.inf
         self.waypoints = None
 
         if manual:
-            self.waypoints = np.array([[8.50931,3.333,-0.206],[10.20931,2.333,-0.206], [14.20931,6.333,-0.206], [20.20931,6.333,-0.206], [26.20931,6.333,-0.206], [28.20931,2.533,-0.206], [30.20931,2.533,-0.206], [32.20931,6.533,-0.206]])
-            #self.waypoints = np.array([[0, 0, -0.206]])
+            # self.waypoints = np.array([[8.50931,3.333,0.0],[10.20931,2.333,0.0], [14.20931,6.333,0.0], [20.20931,6.333,0.0], [26.20931,6.333,0.0], [28.20931,2.533,0.0], [30.20931,2.533,0.0], [32.20931,6.533,0.0]])
+            self.waypoints = np.array([[6.314, 1.616, 0.0], [13.768, 1.616, 0.0], [19.326, -1.1029, 0.0], [20.02, -4.45, 0.284], [19.75, -11.98, 1.665], [19.285, -18.48, 2.84], [18.45, -23.215, 3.215], [11.90, -24.39, 3.215],[-3.45, -22.88, 3.215],[-3.25, -17.00, 2.59], [-3.93, -9.92, 1.28], [-3.85, -3.28, 0.07], [1.726, 0.75, 0.0], [5.34, 2.355, 0.0]])
             self.base_link_position = None
             self.waypoint_index = 0
             self.setup_sub_pub()
@@ -99,7 +105,7 @@ class articulationController(Node):
                                                       self.base_link_position[2]], axis=0)
 
 
-        self.spline = self.gen_spline(_waypoints, 0.5)
+        self.spline = self.gen_spline(_waypoints, 2)
 
         # create a copy of waypoints with 4 additional dimensions
         self.wayposes = np.zeros((len(self.spline), 7))
@@ -112,7 +118,7 @@ class articulationController(Node):
             self.wayposes[i-1,3:7] = self.quaternion_from_two_vectors(self.spline[i-1], self.spline[i])
 
         #print(self.wayposes)   
-        # self.next_position = np.array([8.20931,3.333,-0.206])
+        # self.next_position = np.array([8.20931,3.333,0.0])
         self.send_wayposes(self.wayposes)
 
         self.waypoints = self.spline
@@ -125,7 +131,8 @@ class articulationController(Node):
     def setup_sub_pub(self):
         # self.tf_topic = self.create_subscription(TFMessage, 'tf', self.tf_callback, 10)
         # self.tf_topic  # prevent unused variable warning
-        self.base_link_pose_sub = self.create_subscription(PoseStamped, "/base_link_pose", self.base_link_pose_callback, 10)
+        self.base_link_pose_sub = self.create_subscription(Odometry, "/wagon/base_link_pose_gt", self.base_link_pose_callback, 10)
+        # self.base_link_pose_sub = self.create_subscription(Odometry, "/odometry/local", self.base_link_pose_callback, 10)
         self.base_link_pose_sub  # prevent unused variable warning
         self.goal_pose_sub = self.create_subscription(PoseStamped, "/goal_pose", self.goal_pose_callback, 10)
         self.twist_publisher = self.create_publisher(Twist, self.cmd_vel_topic, 10)
@@ -155,9 +162,12 @@ class articulationController(Node):
 
 
     def base_link_pose_callback(self, msg):
-        self.base_link_position = np.array([msg.pose.position.x, msg.pose.position.y, msg.pose.position.z])
-        self.base_link_orientation = np.array([msg.pose.orientation.x, msg.pose.orientation.y, msg.pose.orientation.z, msg.pose.orientation.w])
+        self.base_link_position = np.array([msg.pose.pose.position.x, msg.pose.pose.position.y, msg.pose.pose.position.z])
+        self.base_link_orientation = np.array([msg.pose.pose.orientation.x, msg.pose.pose.orientation.y, msg.pose.pose.orientation.z, msg.pose.pose.orientation.w])
         # print("pose updated", self.base_link_position)
+        self.base_poses = np.vstack([self.base_poses, self.base_link_position])
+        self.base_orrientations = np.vstack([self.base_orrientations, self.base_link_orientation])
+
         try: 
             if np.any(self.waypoints):
                 end = self.control_vehicle2()
@@ -185,8 +195,16 @@ class articulationController(Node):
     def control_vehicle2(self):
 
         if self.waypoint_index >= len(self.waypoints) - 1:
-            print("Reached Final Waypoint" )
+            print("Reached Final Waypoint, saving to data to file" )
             self.send_twist(0.0,0.0)
+
+
+            with open("/home/danitech/master_ws/src/Danitech-master/wagon_navigation/wagon_navigation/pose_data/" + str(datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")) + "max_vel_" + str(MAX_VEL) + ".pkl", "wb") as f:
+                pickle.dump({'base_pose' : self.base_poses, 'base_or' : self.base_orrientations, 'wayposes' : self.wayposes, 'twist_msgs' : self.twist_msgs, 'max_vel' : MAX_VEL, 'waypoints' : self.waypoints}, f)
+
+            #np.save("/home/danitech/master_ws/src/Danitech-master/wagon_navigation/wagon_navigation/pose_data/" + str(datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")) + ".npy", [self.base_poses, self.base_orrientations, self.wayposes])
+
+
             return 1
         
         angle_diff, direction = self.angle_between_base_point(self.base_link_position, self.base_link_orientation, self.waypoints[self.waypoint_index], get_direction=True)
@@ -203,11 +221,17 @@ class articulationController(Node):
         next_point_weight = 1 - point_weight
 
         if direction == BACKWARDS:
-            print("Reached Waypoint, Distance: ", dist_pose_point)
-            #angle = angle_diff_next
-            self.waypoint_index += 1
-            self.send_wayposes(self.wayposes[self.waypoint_index:])
-            self.old_dist = np.inf
+            for i in range(0,10):
+                if np.linalg.norm(self.base_link_position - self.waypoints[self.waypoint_index + i]) < 2.0:
+                    self.waypoint_index += i+1
+                    print("old dist:", self.old_dist)
+                    print("Reached Waypoint, dist_pose_point: ", dist_pose_point)
+                    #angle = angle_diff_next
+                    # self.waypoint_index += 1
+                    self.send_wayposes(self.wayposes[self.waypoint_index:])
+                    self.old_dist = np.inf
+                    break
+
         else:
             self.old_dist = dist_pose_point
         
@@ -215,8 +239,9 @@ class articulationController(Node):
             # self.send_wayposes(self.wayposes[self.waypoint_index:])
         angle = angle_diff * point_weight + angle_diff_next * next_point_weight
 
-        print("Angle: ", angle)
-        self.send_twist(0.7, angle*1.5) # Add regulatation if diff is larger than max angle, e.g. lower speed
+        
+        # print("Angle_pi: ", 1-(abs(angle/np.pi)))
+        self.send_twist(MAX_VEL * (1-abs(angle/np.pi)), angle*1.5) # Add regulatation if diff is larger than max angle, e.g. lower speed
 
 
         return 0
@@ -275,8 +300,9 @@ class articulationController(Node):
         # self.send_twist(0, 0)
 
     def send_twist(self, linear_vel, angular_vel):
-        if linear_vel > 1.0:
-            linear_vel = 1.0
+        # if linear_vel > 1.0:
+        #     linear_vel = 1.0
+        self.twist_msgs = np.vstack([self.twist_msgs, [linear_vel, angular_vel]])
         twist_msg = Twist()
         twist_msg.linear.x = linear_vel
         twist_msg.angular.z = angular_vel
@@ -399,6 +425,11 @@ class articulationController(Node):
         
         return theta
  
+
+
+    # Create function that saves an np array to a new file
+    def save_np_array(self, array, filename):
+        np.save(filename, array)
 
 
     def tester(self):
