@@ -5,6 +5,7 @@ from rosgraph_msgs.msg import Clock
 from nav_msgs.msg import Odometry
 
 import numpy as np
+from scipy.spatial.transform import Rotation as R
 
 import rclpy
 from rclpy.node import Node
@@ -12,101 +13,116 @@ from rclpy.node import Node
 from tf2_ros import TransformBroadcaster
 
 
+
 def quaternion_from_euler(ai, aj, ak):
-    ai /= 2.0
-    aj /= 2.0
-    ak /= 2.0
-    ci = math.cos(ai)
-    si = math.sin(ai)
-    cj = math.cos(aj)
-    sj = math.sin(aj)
-    ck = math.cos(ak)
-    sk = math.sin(ak)
-    cc = ci*ck
-    cs = ci*sk
-    sc = si*ck
-    ss = si*sk
+	ai /= 2.0
+	aj /= 2.0
+	ak /= 2.0
+	ci = math.cos(ai)
+	si = math.sin(ai)
+	cj = math.cos(aj)
+	sj = math.sin(aj)
+	ck = math.cos(ak)
+	sk = math.sin(ak)
+	cc = ci*ck
+	cs = ci*sk
+	sc = si*ck
+	ss = si*sk
 
-    q = np.empty((4, ))
-    q[0] = cj*sc - sj*cs
-    q[1] = cj*ss + sj*cc
-    q[2] = cj*cs - sj*sc
-    q[3] = cj*cc + sj*ss
+	q = np.empty((4, ))
+	q[0] = cj*sc - sj*cs
+	q[1] = cj*ss + sj*cc
+	q[2] = cj*cs - sj*sc
+	q[3] = cj*cc + sj*ss
 
-    return q
+	return q
 
 
 class FramePublisher(Node):
 
-    def __init__(self):
-        super().__init__('wagon_tf2_frame_publisher')
+	def __init__(self):
+		super().__init__('wagon_tf2_frame_publisher')
 
-        # Declare and acquire `turtlename` parameter
-        self.wagon_name = self.declare_parameter(
-          'base_link_name', 'base_link').get_parameter_value().string_value
+		# Declare and acquire `turtlename` parameter
+		self.wagon_name = self.declare_parameter(
+		'base_link_name', 'base_link').get_parameter_value().string_value
 
-        # Initialize the transform broadcaster
-        self.tf_broadcaster = TransformBroadcaster(self)
-        self.secs = 0
-        self.nanosecs = 0
-        # Subscribe to a turtle{1}{2}/pose topic and call handle_turtle_pose
-        # callback function on each message
-        self.pose_subscription = self.create_subscription(
-            Odometry,
-            '/wagon/' + self.wagon_name + '_pose_gt',
-            self.handle_wagon_pose,
-            1)
-        self.pose_subscription  # prevent unused variable warning
+		# Initialize the transform broadcaster
+		self.tf_broadcaster = TransformBroadcaster(self)
+		self.secs = 0
+		self.nanosecs = 0
+		# Subscribe to a turtle{1}{2}/pose topic and call handle_turtle_pose
+		# callback function on each message
+		self.pose_subscription = self.create_subscription(
+			Odometry,
+			'/wagon/' + self.wagon_name + '_pose_gt',
+			self.handle_wagon_pose,
+			1)
+		self.pose_subscription  # prevent unused variable warning
 
-        self.clock_sub = self.create_subscription(
-            Clock,
-            '/clock',
-            self.handle_clock,
-            1)
-            
-        self.clock_sub  # prevent unused variable warning
+		self.clock_sub = self.create_subscription(
+			Clock,
+			'/clock',
+			self.handle_clock,
+			1)
+			
+		self.clock_sub  # prevent unused variable warning
 
-    def handle_clock(self, msg):
-        self.secs = msg.clock.sec
-        self.nanosecs = msg.clock.nanosec
-        # print("Time: " + str(self.time))
+	def handle_clock(self, msg):
+		self.secs = msg.clock.sec
+		self.nanosecs = msg.clock.nanosec
+		# print("Time: " + str(self.time))
 
 
-    def handle_wagon_pose(self, msg):
-        t = TransformStamped()
+	def handle_wagon_pose(self, msg):
+		t = TransformStamped()
 
-        # Read message content and assign it to
-        # corresponding tf variables
-        t.header.stamp.sec = self.secs
-        t.header.stamp.nanosec = self.nanosecs
-        t.header.frame_id = 'world'
-        t.child_frame_id = self.wagon_name
+		# Read message content and assign it to
+		# corresponding tf variables
+		t.header.stamp.sec = self.secs
+		t.header.stamp.nanosec = self.nanosecs
+		t.header.frame_id = 'base_link'
+		t.child_frame_id = 'world'
 
-        # Turtle only exists in 2D, thus we get x and y translation
-        # coordinates from the message and set the z coordinate to 0
-        t.transform.translation.x = msg.pose.pose.position.x
-        t.transform.translation.y = msg.pose.pose.position.y
-        t.transform.translation.z = msg.pose.pose.position.z
+		rotation = R.from_quat([msg.pose.pose.orientation.x, msg.pose.pose.orientation.y, msg.pose.pose.orientation.z, msg.pose.pose.orientation.w])
+		translation = np.array([msg.pose.pose.position.x, msg.pose.pose.position.y, msg.pose.pose.position.z])
+		
+		# Create the transformation matrix
+		transform = np.eye(4)
+		transform[:3, :3] = rotation.as_matrix()
+		transform[:3, 3] = translation
 
-        # For the same reason, turtle can only rotate around one axis
-        # and this why we set rotation in x and y to 0 and obtain
-        # rotation in z axis from the message
-        # q = quaternion_from_euler(0, 0, msg.pose.orientation.theta)
-        t.transform.rotation.x = msg.pose.pose.orientation.x
-        t.transform.rotation.y = msg.pose.pose.orientation.y
-        t.transform.rotation.z = msg.pose.pose.orientation.z
-        t.transform.rotation.w = msg.pose.pose.orientation.w
+		# Compute the inverse transformation matrix
+		inverse_transform = np.linalg.inv(transform)
 
-        # Send the transformation
-        self.tf_broadcaster.sendTransform(t)
+		# Extract the inverse translation and rotation values
+		inverse_translation = inverse_transform[:3, 3]
+		inverse_rotation = R.from_matrix(inverse_transform[:3, :3])
+
+		# Print the results
+		print("Inverse Translation: ", inverse_translation)
+		print("Inverse Rotation: ", inverse_rotation.as_euler('xyz', degrees=True))
+
+		# Assign the translation and rotation to the
+		# transform message
+		t.transform.translation.x = inverse_translation[0]
+		t.transform.translation.y = inverse_translation[1]
+		t.transform.translation.z = inverse_translation[2]
+		t.transform.rotation.x = inverse_rotation.as_quat()[0]
+		t.transform.rotation.y = inverse_rotation.as_quat()[1]
+		t.transform.rotation.z = inverse_rotation.as_quat()[2]
+		t.transform.rotation.w = inverse_rotation.as_quat()[3]
+		
+		# Send the transformation
+		self.tf_broadcaster.sendTransform(t)
 
 
 def main():
-    rclpy.init()
-    node = FramePublisher()
-    try:
-        rclpy.spin(node)
-    except KeyboardInterrupt:
-        pass
+	rclpy.init()
+	node = FramePublisher()
+	try:
+		rclpy.spin(node)
+	except KeyboardInterrupt:
+		pass
 
-    rclpy.shutdown()
+	rclpy.shutdown()

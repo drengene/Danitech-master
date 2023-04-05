@@ -93,7 +93,7 @@ def extract_PointCloud2_data(msg, unstagger_array = None , visualize=False):
     return data_dict
 
 
-def construct_pointcloud2_msg(data_dict):
+def construct_pointcloud2_msg(data_dict, height = None, width = None):
 	# Test if data_dict is valid dict
 	if not isinstance(data_dict, dict):
 		raise Exception("data_dict is not a dict")
@@ -114,8 +114,8 @@ def construct_pointcloud2_msg(data_dict):
 	if len(msg.fields) == 0:
 		raise Exception("data_dict does not contain any fields")
 	
-	msg.height = data_dict[msg.fields[0].name].shape[0]
-	msg.width = data_dict[msg.fields[0].name].shape[1]
+	msg.height = data_dict[msg.fields[0].name].shape[0] if height is None else height
+	msg.width = data_dict[msg.fields[0].name].shape[1] if width is None else width
 	msg.point_step = offset
 	msg.row_step = msg.point_step * msg.width
 	msg.is_bigendian = False
