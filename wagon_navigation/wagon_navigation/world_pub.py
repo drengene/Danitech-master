@@ -2,6 +2,7 @@ import math
 
 from geometry_msgs.msg import TransformStamped, PoseStamped
 from rosgraph_msgs.msg import Clock
+from nav_msgs.msg import Odometry
 
 import numpy as np
 
@@ -51,8 +52,8 @@ class FramePublisher(Node):
         # Subscribe to a turtle{1}{2}/pose topic and call handle_turtle_pose
         # callback function on each message
         self.pose_subscription = self.create_subscription(
-            PoseStamped,
-            '/' + self.wagon_name + '_pose',
+            Odometry,
+            '/wagon/' + self.wagon_name + '_pose_gt',
             self.handle_wagon_pose,
             1)
         self.pose_subscription  # prevent unused variable warning
@@ -83,18 +84,18 @@ class FramePublisher(Node):
 
         # Turtle only exists in 2D, thus we get x and y translation
         # coordinates from the message and set the z coordinate to 0
-        t.transform.translation.x = msg.pose.position.x
-        t.transform.translation.y = msg.pose.position.y
-        t.transform.translation.z = msg.pose.position.z
+        t.transform.translation.x = msg.pose.pose.position.x
+        t.transform.translation.y = msg.pose.pose.position.y
+        t.transform.translation.z = msg.pose.pose.position.z
 
         # For the same reason, turtle can only rotate around one axis
         # and this why we set rotation in x and y to 0 and obtain
         # rotation in z axis from the message
         # q = quaternion_from_euler(0, 0, msg.pose.orientation.theta)
-        t.transform.rotation.x = msg.pose.orientation.x
-        t.transform.rotation.y = msg.pose.orientation.y
-        t.transform.rotation.z = msg.pose.orientation.z
-        t.transform.rotation.w = msg.pose.orientation.w
+        t.transform.rotation.x = msg.pose.pose.orientation.x
+        t.transform.rotation.y = msg.pose.pose.orientation.y
+        t.transform.rotation.z = msg.pose.pose.orientation.z
+        t.transform.rotation.w = msg.pose.pose.orientation.w
 
         # Send the transformation
         self.tf_broadcaster.sendTransform(t)
