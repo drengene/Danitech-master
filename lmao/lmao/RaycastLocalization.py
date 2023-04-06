@@ -3,10 +3,15 @@ import matplotlib.pyplot as plt
 import open3d as o3d
 import lmao_lib.lidar as Lidar
 import lmao_lib.util.pclmao as pclmao
+from lmao_lib.mapping import get_normals
 
 from scipy.spatial.transform import Rotation as R
 
 import time
+
+import asyncio
+
+import threading
 
 # Ros
 import rclpy
@@ -34,7 +39,8 @@ class RaycastLocalization(Node):
 		self.max_range = max_range
 		self.resolution = resolution
 		self.max_iterations = max_iterations
-		points = []
+		self.lock = threading.Lock()
+		self.points = np.empty((0, 6)) # x, y, z, nx, ny, nz, n being the normal
 		self.pos = np.array([0, 0, 0])
 		self.orientation = np.array([0, 0, 0, 0])
 
@@ -42,7 +48,7 @@ class RaycastLocalization(Node):
 		from rcl_interfaces.msg import ParameterDescriptor
 		self.declare_parameter('map_path', "map.ply", ParameterDescriptor(description="Path to the map file"))
 		self.declare_parameter('lidar_topic', "/wagon/base_scan/lidar_data", ParameterDescriptor(description="Topic to subscribe to for lidar data"))
-		self.declare_parameter('max_range', 10, ParameterDescriptor(description="Maximum range of the lidar"))
+		self.declare_parameter('max_range', 50000, ParameterDescriptor(description="Maximum range of the lidar in mm"))
 		self.declare_parameter("world_frame", "world", ParameterDescriptor(description="The world frame (origin of the map)"))
 		self.declare_parameter("odom_topic", "/odom", ParameterDescriptor(description="Topic to publish odometry data to"))
 
@@ -68,6 +74,10 @@ class RaycastLocalization(Node):
 		self.tf_buffer = Buffer()
 		self.tf_listener = TransformListener(self.tf_buffer, self)
 
+		self.thread = threading.Thread(target=self.create_mesh)
+		self.thread.daemon = True
+		self.thread.start()
+
 	def lidar_callback(self, msg):
 		self.get_logger().info("Received lidar data")
 
@@ -75,7 +85,6 @@ class RaycastLocalization(Node):
 		# x = data["x"], y = data["y"], z = data["z"]
 		# Shape of x: (1024, 128, 1)
 		xyz = np.dstack((data["x"], data["y"], data["z"]))
-		self.get_logger().info("Shape of xyz: {}".format(xyz.shape))
 		# Shape of xyz: (1024, 128, 3)
 		depth = data["range"]
 		# Transform the data to the correct position
@@ -86,13 +95,9 @@ class RaycastLocalization(Node):
 			self.get_logger().error("Transform error: {}, when transforming from {} to {}".format(e, msg.header.frame_id, self.world_frame))
 			return
 		
-		self.get_logger().info("dtype of xyz: {}".format(xyz.dtype))
-		
 		# extract the rotation and translation components of the transform
 		rotation = [t.transform.rotation.x, t.transform.rotation.y, t.transform.rotation.z, t.transform.rotation.w]
 		translation = [t.transform.translation.x, t.transform.translation.y, t.transform.translation.z]
-
-		self.get_logger().info("Rotation: {}, Translation: {}".format(rotation, translation))
 		
 		# Construct the transformation matrix
 		r = R.from_quat(rotation)
@@ -101,30 +106,53 @@ class RaycastLocalization(Node):
 		T[:3, 3] = translation
 
 		#Shape of xyz: (1024, 128, 3)
+		# Transform the data
+		xyz = np.matmul(xyz, T[:3, :3].T) + T[:3, 3]
+		#Shape of xyz: (1024, 128, 3)
+
+		# Get the normals
+		normals = get_normals(xyz)
+		
+		# Shape of xyz: (131072, 3)
 		# Flatten array to [-1, 3]
 		xyz = xyz.reshape(-1, 3)
-		# Shape of xyz: (131072, 3)
-		# Transform the data
-		xyz = np.hstack((xyz, np.ones((xyz.shape[0], 1))))
-		xyz = np.dot(T, xyz.T).T
-		xyz = xyz[:, :3]
+		depth = depth.reshape(-1)
+		normals = normals.reshape(-1, 3)
+		# Remove points that are too far away
+		xyz = xyz[depth < self.max_range]
+		normals = normals[depth < self.max_range]
+		depth = depth[depth < self.max_range]
+
+		# Add points to point
+		self.points = np.concatenate((self.points, np.hstack((xyz, normals))), axis=0)
+
+		# print size of points
+		self.get_logger().info("Shape of points: {}".format(self.points.shape))
 
 		xyz = xyz.astype(np.float32)
 
-		self.get_logger().info("dtype of xyz: {}".format(xyz.dtype))
-		self.get_logger().info("dtype of xyz[:,0]: {}".format(xyz[:, 0].dtype))
-
-
-
 
 		# Create new point cloud object for visualization in rviz
-		pc = pclmao.construct_pointcloud2_msg({"x": xyz[:, 0], "y": xyz[:, 1], "z": xyz[:, 2], "range": depth}, height =msg.height, width=msg.width)
+		pc = pclmao.construct_pointcloud2_msg({"x": xyz[:, 0], "y": xyz[:, 1], "z": xyz[:, 2], "range": depth}, height=1, width=xyz.shape[0])
 		pc.header.frame_id = self.world_frame
 		pc.header.stamp = msg.header.stamp
-		self.get_logger().info("Publishing point cloud data to topic: {}".format("/rviz_pcl"))
 		self.rviz_pub.publish(pc)
 		self.get_logger().info("Published point cloud data to topic: {}".format("/rviz_pcl"))
 
+	async def create_mesh(self):
+		# Create mesh from points
+		pcd = o3d.geometry.PointCloud(o3d.utility.Vector3dVector(self.points[:, :3]))
+		pcd.normals = o3d.utility.Vector3dVector(self.points[:, 3:])
+		self.get_logger().info("Creating mesh from points")
+		self.mesh, densities = o3d.geometry.TriangleMesh.create_from_point_cloud_poisson(pcd, depth=10)
+		self.get_logger().info("Created mesh from points")
+		# Show mesh
+		o3d.visualization.draw_geometries([self.mesh])
+
+
+	# def timer_callback(self):
+	# 	print("Timer callback")
+	# 	asyncio.run(self.create_mesh())
 
 	
 	def load_map(self, map_path):
@@ -137,6 +165,10 @@ class RaycastLocalization(Node):
 def main(args=None):
 	rclpy.init(args=args)
 	localizer = RaycastLocalization(map=None, max_range=10, resolution=0.1, max_iterations=10)
+
+	# Set a function to run every 10s
+	timer_period = 10  # seconds
+	timer = localizer.create_timer(timer_period, localizer.create_mesh)
 	
 	rclpy.spin(localizer)
 	print("What happened?")

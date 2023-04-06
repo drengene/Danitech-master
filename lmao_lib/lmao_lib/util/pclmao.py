@@ -127,9 +127,9 @@ def construct_pointcloud2_msg(data_dict, height = None, width = None):
 
 	for field in msg.fields:
 		datatype_size = DATATYPE_SIZE[field.datatype]
-		#byte_array = data_dict[field.name].reshape(-1).tobytes()
-		data[:, field.offset:field.offset+datatype_size] = np.frombuffer(data_dict[field.name], dtype=np.uint8).reshape(-1, datatype_size)
-		#data[:, field.offset:field.offset+datatype_size] = np.frombuffer(byte_array, dtype=np.uint8).reshape(-1, datatype_size)
+		byte_array = data_dict[field.name].reshape(-1).tobytes()
+		#data[:, field.offset:field.offset+datatype_size] = np.frombuffer(data_dict[field.name], dtype=np.uint8).reshape(-1, datatype_size)
+		data[:, field.offset:field.offset+datatype_size] = np.frombuffer(byte_array, dtype=np.uint8).reshape(-1, datatype_size)
 	# Flatten data
 	data = data.reshape(-1)
 	

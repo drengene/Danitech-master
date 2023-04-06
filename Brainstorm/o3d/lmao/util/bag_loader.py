@@ -55,8 +55,8 @@ class BagLoader:
 
 				# shift every row with the pixel shift
 				for i in range(0, 128):
-					xyz[i, :] = np.roll(xyz[i, :], -self.pixel_shift_1024x10[i], axis=0)
-					depth[i, :] = np.roll(depth[i, :], -self.pixel_shift_1024x10[i], axis=0)
+					xyz[i, :] = np.roll(xyz[i, :], self.pixel_shift_1024x10[i], axis=0)
+					depth[i, :] = np.roll(depth[i, :], self.pixel_shift_1024x10[i], axis=0)
 
 
 

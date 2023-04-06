@@ -74,3 +74,6 @@ print("Number of triangles: ", len(mesh.triangles))
 o3d.visualization.draw_geometries([mesh], lookat = np.array(np.float64([ -0.5385805773511031, -2.7543633327825869, -0.50953180767962569 ])), 
                                   up = np.array(np.float64([ 0.0, 0.0, 1 ])), 
                                   front = np.array(np.float64([ 0.84732198172019557, -0.52728541423993913, 0.063368377157510217 ])), zoom = 0.16 )
+
+# Export mesh as .ply file
+o3d.io.write_triangle_mesh("office_poisson.ply", mesh)
