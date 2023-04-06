@@ -7,16 +7,18 @@ from lmao_lib.mapping import get_normals
 
 from scipy.spatial.transform import Rotation as R
 
-import time
-
-import asyncio
+import concurrent.futures
 
 import threading
+
+import time
 
 # Ros
 import rclpy
 from rclpy.node import Node
 from sensor_msgs.msg import PointCloud2
+from rclpy.executors import MultiThreadedExecutor
+from rclpy.callback_groups import ReentrantCallbackGroup, MutuallyExclusiveCallbackGroup
 
 # Import odometry message
 from nav_msgs.msg import Odometry
@@ -59,10 +61,20 @@ class RaycastLocalization(Node):
 		self.world_frame = self.get_parameter("world_frame").value
 		self.odom_topic = self.get_parameter("odom_topic").value
 
+
+		sub_cb_group = MutuallyExclusiveCallbackGroup()
+		timer_cb_group = MutuallyExclusiveCallbackGroup()
+
 		# Create the subscriber
-		self.create_subscription(PointCloud2, self.lidar_topic, self.lidar_callback, 10)
+		self.create_subscription(PointCloud2, self.lidar_topic, self.lidar_callback, 10, callback_group=sub_cb_group)
+
+		# Create timer to run function every 10s set a function to run every 10s
+		timer_period = 10  # seconds
+		self.timer = self.create_timer(timer_period, self.create_mesh, callback_group=timer_cb_group)
+
 		# Print info
 		self.get_logger().info("Subscribed to topic: {}".format(self.lidar_topic))
+
 
 		# Create publisher
 		self.odom_pub = self.create_publisher(Odometry, self.odom_topic, 10)
@@ -74,12 +86,19 @@ class RaycastLocalization(Node):
 		self.tf_buffer = Buffer()
 		self.tf_listener = TransformListener(self.tf_buffer, self)
 
-		self.thread = threading.Thread(target=self.create_mesh)
-		self.thread.daemon = True
-		self.thread.start()
+		self.last_call = time.time()
+
 
 	def lidar_callback(self, msg):
 		self.get_logger().info("Received lidar data")
+
+		# Detect time between calls to see if the data is being published at the correct rate
+		now = time.time()
+		# Print if time between calls is greater than 1s
+		if now - self.last_call > 1:
+			self.get_logger().info("Time between calls: {}".format(now - self.last_call))
+		self.last_call = now
+
 
 		data = pclmao.extract_PointCloud2_data(msg)
 		# x = data["x"], y = data["y"], z = data["z"]
@@ -124,10 +143,11 @@ class RaycastLocalization(Node):
 		depth = depth[depth < self.max_range]
 
 		# Add points to point
-		self.points = np.concatenate((self.points, np.hstack((xyz, normals))), axis=0)
+		with self.lock:
+			self.points = np.concatenate((self.points, np.hstack((xyz, normals))), axis=0)
 
-		# print size of points
-		self.get_logger().info("Shape of points: {}".format(self.points.shape))
+			# print size of points
+			self.get_logger().info("Shape of points: {}".format(self.points.shape))
 
 		xyz = xyz.astype(np.float32)
 
@@ -139,20 +159,30 @@ class RaycastLocalization(Node):
 		self.rviz_pub.publish(pc)
 		self.get_logger().info("Published point cloud data to topic: {}".format("/rviz_pcl"))
 
-	async def create_mesh(self):
+	def create_mesh(self):
+		with self.lock:
+			points = self.points.copy()
+		print("I'm sleeping for 2 seconds")
+		time.sleep(2)
+		print("I'm awake")
 		# Create mesh from points
-		pcd = o3d.geometry.PointCloud(o3d.utility.Vector3dVector(self.points[:, :3]))
-		pcd.normals = o3d.utility.Vector3dVector(self.points[:, 3:])
+		pcd = o3d.geometry.PointCloud(o3d.utility.Vector3dVector(points[:, :3]))
+		pcd.normals = o3d.utility.Vector3dVector(points[:, 3:])
 		self.get_logger().info("Creating mesh from points")
-		self.mesh, densities = o3d.geometry.TriangleMesh.create_from_point_cloud_poisson(pcd, depth=10)
+		self.mesh, densities = o3d.geometry.TriangleMesh.create_from_point_cloud_poisson(pcd, depth=10, n_threads=1)
 		self.get_logger().info("Created mesh from points")
 		# Show mesh
 		o3d.visualization.draw_geometries([self.mesh])
 
 
-	# def timer_callback(self):
-	# 	print("Timer callback")
-	# 	asyncio.run(self.create_mesh())
+	def timer_callback(self):
+		print("I'm sleeping for 2 seconds")
+		time.sleep(2)
+		print("I'm awake")
+		# Submit the task to the executor
+		# with self.lock:
+		# 	points_copy = self.points.copy()
+		# self.create_mesh(points_copy)
 
 	
 	def load_map(self, map_path):
@@ -165,12 +195,11 @@ class RaycastLocalization(Node):
 def main(args=None):
 	rclpy.init(args=args)
 	localizer = RaycastLocalization(map=None, max_range=10, resolution=0.1, max_iterations=10)
-
-	# Set a function to run every 10s
-	timer_period = 10  # seconds
-	timer = localizer.create_timer(timer_period, localizer.create_mesh)
 	
-	rclpy.spin(localizer)
+	executor = MultiThreadedExecutor()
+	executor.add_node(localizer)
+	executor.spin()
+
 	print("What happened?")
 
 	# Destroy the node explicitly
