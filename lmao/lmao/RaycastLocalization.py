@@ -9,6 +9,8 @@ from scipy.spatial.transform import Rotation as R
 
 import concurrent.futures
 
+from multiprocessing import Process, Pool, Queue
+
 import threading
 
 import time
@@ -30,6 +32,50 @@ from geometry_msgs.msg import TwistWithCovariance
 from tf2_ros import TransformException
 from tf2_ros.buffer import Buffer
 from tf2_ros.transform_listener import TransformListener
+
+#from open3d.cpu.pybind.geometry import TriangleMesh
+
+
+class _MeshTransmissionFormat:
+    def __init__(self, mesh: o3d.geometry.TriangleMesh):
+        self.triangle_material_ids = np.array(mesh.triangle_material_ids)
+        self.triangle_normals = np.array(mesh.triangle_normals)
+        self.triangle_uvs = np.array(mesh.triangle_uvs)
+        self.triangles = np.array(mesh.triangles)
+
+        self.vertex_colors = np.array(mesh.vertex_colors)
+        self.vertex_normals = np.array(mesh.vertex_normals)
+        self.vertices = np.array(mesh.vertices)
+
+    def create_mesh(self) -> o3d.geometry.TriangleMesh:
+        mesh = o3d.geometry.TriangleMesh()
+
+        mesh.triangle_material_ids = o3d.utility.IntVector(self.triangle_material_ids)
+        mesh.triangle_normals = o3d.utility.Vector3dVector(self.triangle_normals)
+        mesh.triangle_uvs = o3d.utility.Vector2dVector(self.triangle_uvs)
+        mesh.triangles = o3d.utility.Vector3iVector(self.triangles)
+
+        mesh.vertex_colors = o3d.utility.Vector3dVector(self.vertex_colors)
+        mesh.vertex_normals = o3d.utility.Vector3dVector(self.vertex_normals)
+
+        mesh.vertices = o3d.utility.Vector3dVector(self.vertices)
+        return mesh
+    
+
+def create_mesh(points, queue):	
+		print("Process started successfully")
+		print("Creating mesh from {} points".format(len(points)))
+		# Create mesh from points
+		pcd = o3d.geometry.PointCloud(o3d.utility.Vector3dVector(points[:, :3]))
+		pcd.normals = o3d.utility.Vector3dVector(points[:, 3:])
+		print("Creating mesh from points")
+		# Run asynchroneously 
+		mesh, densities = o3d.geometry.TriangleMesh.create_from_point_cloud_poisson(pcd, depth=10, n_threads=1)
+		print("Created mesh from points")
+		# Add mesh to queue
+		queue.put(_MeshTransmissionFormat(mesh))
+		print("Added mesh to queue")
+
 
 
 
@@ -61,6 +107,10 @@ class RaycastLocalization(Node):
 		self.world_frame = self.get_parameter("world_frame").value
 		self.odom_topic = self.get_parameter("odom_topic").value
 
+		self.map_building = False
+
+		self.last_transform = np.zeros(7) # x, y, z, qx, qy, qz, qw
+
 
 		sub_cb_group = MutuallyExclusiveCallbackGroup()
 		timer_cb_group = MutuallyExclusiveCallbackGroup()
@@ -69,8 +119,8 @@ class RaycastLocalization(Node):
 		self.create_subscription(PointCloud2, self.lidar_topic, self.lidar_callback, 10, callback_group=sub_cb_group)
 
 		# Create timer to run function every 10s set a function to run every 10s
-		timer_period = 10  # seconds
-		self.timer = self.create_timer(timer_period, self.create_mesh, callback_group=timer_cb_group)
+		timer_period = 20  # seconds
+		self.timer = self.create_timer(timer_period, self.timer_callback, callback_group=timer_cb_group)
 
 		# Print info
 		self.get_logger().info("Subscribed to topic: {}".format(self.lidar_topic))
@@ -90,7 +140,23 @@ class RaycastLocalization(Node):
 
 
 	def lidar_callback(self, msg):
-		self.get_logger().info("Received lidar data")
+		#self.get_logger().info("Received lidar data")
+
+		# Attempt to get transform at time of message, otherwise get most recent
+		try:
+			# Get the true transform at the time of the message
+			t = self.tf_buffer.lookup_transform(self.world_frame, msg.header.frame_id, msg.header.stamp)
+		except TransformException as e:
+			# self.get_logger().warn("Transform error: {}, when transforming from {} to {}\n Trying most recent".format(e, msg.header.frame_id, self.world_frame))
+			t = None
+			
+		if t is None:
+			try:
+				# Get the most recent transform
+				t = self.tf_buffer.lookup_transform(self.world_frame, msg.header.frame_id, rclpy.time.Time())
+			except TransformException as e:
+				# self.get_logger().error("Transform error: {}, when transforming from {} to {}".format(e, msg.header.frame_id, self.world_frame))
+				return
 
 		# Detect time between calls to see if the data is being published at the correct rate
 		now = time.time()
@@ -98,6 +164,21 @@ class RaycastLocalization(Node):
 		if now - self.last_call > 1:
 			self.get_logger().info("Time between calls: {}".format(now - self.last_call))
 		self.last_call = now
+
+		# Calculate distance since last transform and angular change
+		# Get the translation and rotation components of the transform
+		translation = [t.transform.translation.x, t.transform.translation.y, t.transform.translation.z]
+		rotation = [t.transform.rotation.x, t.transform.rotation.y, t.transform.rotation.z, t.transform.rotation.w]
+		# Calculate the distance since the last transform
+		distance = np.linalg.norm(np.array(translation) - self.last_transform[:3])
+		# Calculate the angular difference between the two quaternions
+		angular_change = np.arccos(abs(np.dot(rotation, self.last_transform[3:])))
+
+		# If the distance is not greater than 0.1m or the angular change is not greater than 0.1 radians, return
+		if distance < 0.1 and angular_change < 0.1:
+			print("Distance: {}, Angular change: {}".format(distance, angular_change))
+			return
+		self.last_transform = np.array(np.concatenate((translation, rotation)))
 
 
 		data = pclmao.extract_PointCloud2_data(msg)
@@ -107,13 +188,15 @@ class RaycastLocalization(Node):
 		# Shape of xyz: (1024, 128, 3)
 		depth = data["range"]
 		# Transform the data to the correct position
-		try:
-			# Get the most recent transform
-			t = self.tf_buffer.lookup_transform(self.world_frame, msg.header.frame_id, rclpy.time.Time())
-		except TransformException as e:
-			self.get_logger().error("Transform error: {}, when transforming from {} to {}".format(e, msg.header.frame_id, self.world_frame))
-			return
-		
+
+
+		#Shpae of depth: (1024, 128, 1)
+		# Set all values below 1500 to 0
+		depth[depth < 2300] = 0
+
+
+		# Show data with matplotlib
+
 		# extract the rotation and translation components of the transform
 		rotation = [t.transform.rotation.x, t.transform.rotation.y, t.transform.rotation.z, t.transform.rotation.w]
 		translation = [t.transform.translation.x, t.transform.translation.y, t.transform.translation.z]
@@ -137,10 +220,13 @@ class RaycastLocalization(Node):
 		xyz = xyz.reshape(-1, 3)
 		depth = depth.reshape(-1)
 		normals = normals.reshape(-1, 3)
-		# Remove points that are too far away
-		xyz = xyz[depth < self.max_range]
-		normals = normals[depth < self.max_range]
-		depth = depth[depth < self.max_range]
+
+
+		# Remove points that are too far away or are zero
+		mask = np.logical_and(1 < depth, depth < self.max_range)
+		xyz = xyz[mask]
+		normals = normals[mask]
+		depth = depth[mask]
 
 		# Add points to point
 		with self.lock:
@@ -157,32 +243,32 @@ class RaycastLocalization(Node):
 		pc.header.frame_id = self.world_frame
 		pc.header.stamp = msg.header.stamp
 		self.rviz_pub.publish(pc)
-		self.get_logger().info("Published point cloud data to topic: {}".format("/rviz_pcl"))
-
-	def create_mesh(self):
-		with self.lock:
-			points = self.points.copy()
-		print("I'm sleeping for 2 seconds")
-		time.sleep(2)
-		print("I'm awake")
-		# Create mesh from points
-		pcd = o3d.geometry.PointCloud(o3d.utility.Vector3dVector(points[:, :3]))
-		pcd.normals = o3d.utility.Vector3dVector(points[:, 3:])
-		self.get_logger().info("Creating mesh from points")
-		self.mesh, densities = o3d.geometry.TriangleMesh.create_from_point_cloud_poisson(pcd, depth=10, n_threads=1)
-		self.get_logger().info("Created mesh from points")
-		# Show mesh
-		o3d.visualization.draw_geometries([self.mesh])
 
 
 	def timer_callback(self):
-		print("I'm sleeping for 2 seconds")
-		time.sleep(2)
-		print("I'm awake")
-		# Submit the task to the executor
-		# with self.lock:
-		# 	points_copy = self.points.copy()
-		# self.create_mesh(points_copy)
+		if self.map_building:
+			return
+		t0 = time.time()
+		self.map_building = True
+		with self.lock:
+			points = self.points.copy()
+		# Create queue for multiprocessing
+		q = Queue()
+		# Create process
+		p = Process(target=create_mesh, args=(points, q,))
+		p.start()
+		# Get mesh from queue
+		mesh = q.get().create_mesh()
+		# Print time taken
+		self.get_logger().info("Time taken: {}".format(time.time() - t0))
+		# Show mesh
+		o3d.visualization.draw_geometries([mesh])
+		# Join process
+		p.join()
+		# Save mesh to Documents
+		o3d.io.write_triangle_mesh("/home/junge/Documents/mesh_map/map.ply", mesh)
+
+		self.map_building = False
 
 	
 	def load_map(self, map_path):
@@ -199,8 +285,6 @@ def main(args=None):
 	executor = MultiThreadedExecutor()
 	executor.add_node(localizer)
 	executor.spin()
-
-	print("What happened?")
 
 	# Destroy the node explicitly
 	# (optional - otherwise it will be done automatically
