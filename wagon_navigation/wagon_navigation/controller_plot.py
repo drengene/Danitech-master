@@ -58,11 +58,29 @@ def poly_fit_plot(base_pose, wayposes):
     ax.set_ylabel('Y Label')
     ax.set_zlabel('Z Label')
 
+    # even axes
+    ax.set_box_aspect((np.ptp(base_x), np.ptp(base_y), np.ptp(base_z)))  # aspect ratio is 1:1:1 in data space
+
     # add legend
     ax.legend(['base_pose', 'wayposes'])
     # show the plot
     plt.show()
     
+def calc_closest_dist_error(base_pose, wayposes):
+    
+    closest = np.zeros(wayposes.shape[0])
+
+    print(closest.shape)
+    for i in range(0, wayposes.shape[0]):
+        diff = np.zeros(base_pose.shape[0])
+        for j in range(0, base_pose.shape[0]):
+            diff[j] = np.linalg.norm(base_pose[j] - wayposes[i])
+
+        closest[i] = min(diff)
+
+
+
+    return closest
 
 
 def calc_rme(base_pose, wayposes):
@@ -168,8 +186,21 @@ wayposes[0,:] = first_pose
 print(wayposes[0,:])
 # print(wayposes)
 #print(len(wayposes))
-print("first closest point:", find_first_closes_point(base_pose, wayposes))
+#print("first closest point:", find_first_closes_point(base_pose, wayposes))
 
 calc_rme(base_pose, wayposes[:,0:3])
+dists_xyz = calc_closest_dist_error(base_pose, wayposes[:-1,0:3])
+print("xyz", dists_xyz)
+dists_xy = calc_closest_dist_error(base_pose[:,0:2], wayposes[:-1,0:2])
+print("xy", dists_xy)
+print("mean xyz", np.mean(dists_xyz))
+print("mean xy", np.mean(dists_xy))
+print("diff xy xyz", dists_xy - dists_xyz)
+
+
+interp_wayposes = interpolate_points(wayposes[:-1, 0:3], np.shape(base_pose)[0]*2)
+dist_to_pose = calc_closest_dist_error(interp_wayposes[:,0:2], base_pose[:])
+print("dist to pose", np.mean(dist_to_pose))
+
 poly_fit_plot(base_pose, wayposes)
 #scatter_plot(base_pose, wayposes)
