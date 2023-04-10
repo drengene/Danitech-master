@@ -7,9 +7,8 @@ from lmao_lib.mapping import get_normals
 
 from scipy.spatial.transform import Rotation as R
 
-import concurrent.futures
 
-from multiprocessing import Process, Pool, Queue
+from multiprocessing import Process, Queue
 
 import threading
 
@@ -20,20 +19,15 @@ import rclpy
 from rclpy.node import Node
 from sensor_msgs.msg import PointCloud2
 from rclpy.executors import MultiThreadedExecutor
-from rclpy.callback_groups import ReentrantCallbackGroup, MutuallyExclusiveCallbackGroup
+from rclpy.callback_groups import MutuallyExclusiveCallbackGroup
 
 # Import odometry message
 from nav_msgs.msg import Odometry
-
-from geometry_msgs.msg import PoseWithCovariance
-from geometry_msgs.msg import TwistWithCovariance
 
 # Tf2
 from tf2_ros import TransformException
 from tf2_ros.buffer import Buffer
 from tf2_ros.transform_listener import TransformListener
-
-#from open3d.cpu.pybind.geometry import TriangleMesh
 
 
 class _MeshTransmissionFormat:
@@ -79,10 +73,10 @@ def create_mesh(points, queue):
 
 
 
-# Define the class for the raycast localization node
-class RaycastLocalization(Node):
+# Define the class for map construction node
+class MapConstructor(Node):
 	def __init__(self, map, max_range, resolution, max_iterations):
-		super().__init__('raycast_localization')
+		super().__init__('map_constructor')
 		self.map = map
 		self.max_range = max_range
 		self.resolution = resolution
@@ -97,6 +91,7 @@ class RaycastLocalization(Node):
 		self.declare_parameter('map_path', "map.ply", ParameterDescriptor(description="Path to the map file"))
 		self.declare_parameter('lidar_topic', "/wagon/base_scan/lidar_data", ParameterDescriptor(description="Topic to subscribe to for lidar data"))
 		self.declare_parameter('max_range', 50000, ParameterDescriptor(description="Maximum range of the lidar in mm"))
+		self.declare_parameter('min_range', 2300, ParameterDescriptor(description="Minimum range of the lidar in mm"))
 		self.declare_parameter("world_frame", "world", ParameterDescriptor(description="The world frame (origin of the map)"))
 		self.declare_parameter("odom_topic", "/odom", ParameterDescriptor(description="Topic to publish odometry data to"))
 
@@ -104,6 +99,7 @@ class RaycastLocalization(Node):
 		self.map_path = self.get_parameter("map_path").value
 		self.lidar_topic = self.get_parameter("lidar_topic").value
 		self.max_range = self.get_parameter("max_range").value
+		self.min_range = self.get_parameter("min_range").value
 		self.world_frame = self.get_parameter("world_frame").value
 		self.odom_topic = self.get_parameter("odom_topic").value
 
@@ -189,12 +185,6 @@ class RaycastLocalization(Node):
 		depth = data["range"]
 		# Transform the data to the correct position
 
-
-		#Shpae of depth: (1024, 128, 1)
-		# Set all values below 1500 to 0
-		depth[depth < 2300] = 0
-
-
 		# Show data with matplotlib
 
 		# extract the rotation and translation components of the transform
@@ -223,7 +213,7 @@ class RaycastLocalization(Node):
 
 
 		# Remove points that are too far away or are zero
-		mask = np.logical_and(1 < depth, depth < self.max_range)
+		mask = np.logical_and(self.min_range < depth, depth < self.max_range)
 		xyz = xyz[mask]
 		normals = normals[mask]
 		depth = depth[mask]
@@ -280,7 +270,7 @@ class RaycastLocalization(Node):
 
 def main(args=None):
 	rclpy.init(args=args)
-	localizer = RaycastLocalization(map=None, max_range=10, resolution=0.1, max_iterations=10)
+	localizer = MapConstructor(map=None, max_range=10, resolution=0.1, max_iterations=10)
 	
 	executor = MultiThreadedExecutor()
 	executor.add_node(localizer)

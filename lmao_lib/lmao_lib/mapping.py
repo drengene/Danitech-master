@@ -136,11 +136,6 @@ class Map:
 		
 		return mesh
 
-		
-
-
-
-
 
 def get_normals(image):
 	# Takes as input a [m,n,3] of points in 3d space.
