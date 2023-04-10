@@ -16,6 +16,8 @@ def generate_launch_description():
 
     use_sim_time = LaunchConfiguration('use_sim_time', default= 'true')
 
+    pub_world = LaunchConfiguration('pub_world', default= 'false')
+
     use_ekf = LaunchConfiguration('use_ekf', default= 'true')
 
     urdf_file_name = 'wagon.urdf'
@@ -32,9 +34,9 @@ def generate_launch_description():
             default_value='true',
             description='Use simulation (Gazebo) clock if true')
 
-    pub_world = DeclareLaunchArgument(
+    pub_world_arg = DeclareLaunchArgument(
             'pub_world',
-            default_value='true',
+            default_value='false',
             description='Publish world tf if true')
     
     ekf_arg = DeclareLaunchArgument(
@@ -84,4 +86,5 @@ def generate_launch_description():
         sim_world_tf_node,
         ekf_arg,
         ekf_odom_launch,
+        pub_world_arg
         ])
