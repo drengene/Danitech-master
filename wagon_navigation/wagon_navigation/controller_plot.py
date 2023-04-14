@@ -168,7 +168,8 @@ def find_first_closes_point(base_pose, wayposes):
         diff_old = diff
 
 # specify the folder path where your pickle files are stored
-folder_path = '/home/daniel/master_ws/src/Danitech-master/wagon_navigation/wagon_navigation/pose_data/'
+#folder_path = '/home/daniel/master_ws/src/Danitech-master/wagon_navigation/wagon_navigation/pose_data/'
+folder_path = '/home/danitech/master_ws/src/Danitech-master/wagon_navigation/wagon_navigation/pose_data/'
 
 # load the latest file in the folder
 data = load_latest_file(folder_path)
@@ -199,7 +200,7 @@ print("diff xy xyz", dists_xy - dists_xyz)
 
 
 interp_wayposes = interpolate_points(wayposes[:-1, 0:3], np.shape(base_pose)[0]*2)
-dist_to_pose = calc_closest_dist_error(interp_wayposes[:,0:2], base_pose[:])
+dist_to_pose = calc_closest_dist_error(interp_wayposes[:,0:2], base_pose[:,0:2])
 print("dist to pose", np.mean(dist_to_pose))
 
 poly_fit_plot(base_pose, wayposes)

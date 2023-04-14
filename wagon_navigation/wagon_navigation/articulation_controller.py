@@ -36,12 +36,14 @@ class articulationController(Node):
         self.declare_parameter('base_link_frame', 'base_link', ParameterDescriptor(description="Base link frame name"))
         self.declare_parameter('odom_frame', 'odom', ParameterDescriptor(description="Odometry frame name"))
         self.declare_parameter('world_frame', 'odom', ParameterDescriptor(description="World frame name"))
+        self.declare_parameter('path_update_rate', 2, ParameterDescriptor(description="Update rate in Hz of the path generation"))
 
         self.cmd_vel_topic = self.get_parameter('cmd_vel_topic').value
         # self.joint_state_topic = self.get_parameter('joint_state_topic').value
         self.base_link_frame = self.get_parameter('base_link_frame').value
         self.odom_frame = self.get_parameter('odom_frame').value
         self.world_frame = self.get_parameter('world_frame').value
+        self.path_update_rate = self.get_parameter('path_update_rate').value
 
         # declare parameters from the parameters above
         self.base_poses = np.array([0, 0, 0])
@@ -56,7 +58,10 @@ class articulationController(Node):
         manual = True
         self.old_dist = np.inf
         self.waypoints = None
+        self.goal_position = None
+        self.waypoint_index = 0
 
+        self.wayposes = None
         if manual:
             # self.waypoints = np.array([[8.50931,3.333,0.0],[10.20931,2.333,0.0], [14.20931,6.333,0.0], [20.20931,6.333,0.0], [26.20931,6.333,0.0], [28.20931,2.533,0.0], [30.20931,2.533,0.0], [32.20931,6.533,0.0]])
             self.waypoints = np.array([[6.314, 1.616, 0.0], [13.768, 1.616, 0.0], [19.326, -1.1029, 0.0], [20.02, -4.45, 0.284], [19.75, -11.98, 1.665], [19.285, -18.48, 2.84], [18.45, -23.215, 3.215], [11.90, -24.39, 3.215],[-3.45, -22.88, 3.215],[-3.25, -17.00, 2.59], [-3.93, -9.92, 1.28], [-3.85, -3.28, 0.07], [1.726, 0.75, 0.0], [5.34, 2.355, 0.0]])
@@ -66,7 +71,6 @@ class articulationController(Node):
             self.gen_init_path(self.waypoints)
         else:
             self.setup_sub_pub()
-            self.goal_position = None
             self.wait_for_goal()
             
 
@@ -123,7 +127,6 @@ class articulationController(Node):
 
         self.waypoints = self.spline
         
-        self.waypoint_index = 0
 
         # self.direction = FORWARDS
 
@@ -131,16 +134,30 @@ class articulationController(Node):
     def setup_sub_pub(self):
         # self.tf_topic = self.create_subscription(TFMessage, 'tf', self.tf_callback, 10)
         # self.tf_topic  # prevent unused variable warning
-        self.base_link_pose_sub = self.create_subscription(Odometry, "/wagon/base_link_pose_gt", self.base_link_pose_callback, 10)
         # self.base_link_pose_sub = self.create_subscription(Odometry, "/odometry/local", self.base_link_pose_callback, 10)
-        self.base_link_pose_sub  # prevent unused variable warning
         self.goal_pose_sub = self.create_subscription(PoseStamped, "/goal_pose", self.goal_pose_callback, 10)
         self.twist_publisher = self.create_publisher(Twist, self.cmd_vel_topic, 10)
         self.clock_sub = self.create_subscription(Clock, "/clock", self.clock_callback, 10)
+        self.update_timer = self.secs + self.nanosecs * 1e-9
+        
+        # spin for a bit to get the first message
+        for i in range(10):
+            rclpy.spin_once(self, timeout_sec=0.1)
+
+
+        self.base_link_pose_sub = self.create_subscription(Odometry, "/wagon/base_link_pose_gt", self.base_link_pose_callback, 10)
+        self.base_link_pose_sub  # prevent unused variable warning
+
+        rclpy.spin_once(self, timeout_sec=0.1)
+        
+        
         self.waypose_publisher = self.create_publisher(PoseArray, "/wayposes", 10)
 
         self.marker_publisher = self.create_publisher(MarkerArray, "/markers", 10)
         self.point_publisher = self.create_publisher(PointStamped, "/points", 10)
+
+        
+
 
 
 
@@ -150,6 +167,7 @@ class articulationController(Node):
     def clock_callback(self, msg):
         self.secs = msg.clock.sec
         self.nanosecs = msg.clock.nanosec
+        self.time = self.secs + self.nanosecs * 1e-9
         # print("Time: " + str(self.time))
 
 
@@ -167,20 +185,31 @@ class articulationController(Node):
         # print("pose updated", self.base_link_position)
         self.base_poses = np.vstack([self.base_poses, self.base_link_position])
         self.base_orrientations = np.vstack([self.base_orrientations, self.base_link_orientation])
+        #print(self.base_poses)
 
         try: 
-            if np.any(self.waypoints):
+            if np.any(self.waypoints) and self.wayposes is not None:
                 end = self.control_vehicle2()
+                elapsed_time = self.time - self.update_timer
+
                 if end:
                     self.goal_position = None
                     self.waypoints = None
+                    self.waypoint_index = 0
                     print("waiting for new goal")
+                    
+                # Run the gen_init_path functino at 2 hz
+                elif elapsed_time > self.path_update_rate:
+                    print("Updates the new path, from index: ", self.waypoint_index)
+                    self.gen_init_path(self.wayposes[self.waypoint_index:,0:3])
+                    self.waypoint_index = 0
+
+                    self.update_timer = self.time
+            
             else:
                 self.wait_for_goal()
-            # self.send_wayposes(self.wayposes)
-            # for point in self.og_waypoints:
-            # # print(point)
-            #     self.send_points(point)
+
+            
 
 
         except KeyboardInterrupt as e:
@@ -194,7 +223,7 @@ class articulationController(Node):
 
     def control_vehicle2(self):
 
-        if self.waypoint_index >= len(self.waypoints) - 1:
+        if len(self.waypoints) < 3 and np.linalg.norm(self.base_link_position - self.waypoints[-1]) < 0.5:
             print("Reached Final Waypoint, saving to data to file" )
             self.send_twist(0.0,0.0)
 
@@ -221,14 +250,19 @@ class articulationController(Node):
         next_point_weight = 1 - point_weight
 
         if direction == BACKWARDS:
-            for i in range(0,10):
+            if len(self.waypoints) < self.waypoint_index + 10:
+                lookahead_nums = len(self.waypoints) - self.waypoint_index
+            else:
+                lookahead_nums = 10
+
+            for i in range(0, lookahead_nums):
                 if np.linalg.norm(self.base_link_position - self.waypoints[self.waypoint_index + i]) < 2.0:
                     self.waypoint_index += i+1
                     print("old dist:", self.old_dist)
                     print("Reached Waypoint, dist_pose_point: ", dist_pose_point)
                     #angle = angle_diff_next
                     # self.waypoint_index += 1
-                    self.send_wayposes(self.wayposes[self.waypoint_index:])
+                    # self.send_wayposes(self.wayposes[self.waypoint_index:])
                     self.old_dist = np.inf
                     break
 
@@ -246,58 +280,6 @@ class articulationController(Node):
 
         return 0
 
-
-
-        # if dist < 0.5:
-        #     print("Reached Waypoint, Distance: ", dist)
-        #     if self.waypoint_index >= len(self.waypoints) - 1:
-        #         print("Reached Final Waypoint, waiting for new goal, Distance: ", dist)
-        #         self.send_twist(0.0,0.0)
-        #         return 1
-        #     else:
-        #         self.waypoint_index += 1
-        #         self.send_wayposes(self.wayposes[self.waypoint_index:])
-        #         return 0
-
-
-
-
-
-
-    def control_vehicle(self):
-
-        angle = self.angle_between_base_point(self.base_link_position, self.base_link_orientation, self.waypoints[self.waypoint_index])
-        dist = np.linalg.norm(self.base_link_position - self.waypoints[self.waypoint_index])
-
-        if np.abs(angle) > 0.1:
-            self.send_twist(0.5*dist*self.direction, angle)
-            angle = self.angle_between_base_point(self.base_link_position, self.base_link_orientation, self.waypoints[self.waypoint_index])
-            # print("Angle in deg: ", np.rad2deg(angle))
-            # rclpy.spin_once(self, timeout_sec=0.1)
-            # return
-
-
-        if dist > 0.5 and np.abs(angle) < 0.1:
-            self.send_twist(0.5*dist*self.direction,0.0)
-            # print("Distance: ", dist)
-            dist = np.linalg.norm(self.base_link_position - self.waypoints[self.waypoint_index])
-            # rclpy.spin_once(self, timeout_sec=0.1)
-            # return
-        if dist < 0.5:
-            print("Reached Waypoint, Distance: ", dist)
-            if self.waypoint_index >= len(self.waypoints) - 1:
-                print("Reached Final Waypoint, waiting for new goal, Distance: ", dist)
-                self.send_twist(0.0,0.0)
-                self.wait_for_goal()
-                return
-            else:
-                self.waypoint_index += 1
-                self.send_wayposes(self.wayposes[self.waypoint_index:])
-
-
-
-
-        # self.send_twist(0, 0)
 
     def send_twist(self, linear_vel, angular_vel):
         # if linear_vel > 1.0:

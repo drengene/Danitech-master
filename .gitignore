@@ -6,3 +6,5 @@
 *.bt
 *.obj
 *.ply
+*.pkl
+*.npy
