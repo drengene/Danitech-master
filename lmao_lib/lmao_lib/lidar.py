@@ -18,11 +18,11 @@ import json
 
 
 class Virtual_Lidar:
-	def __init__(self, horizontal_lines=64, rays_per_line=1024, vertical_fov = np.pi/2):
+	def __init__(self, horizontal_lines=128, rays_per_line=1024, vertical_fov = np.pi/2, offset = 0):
 		self.horizontal_lines = horizontal_lines
 		self.rays_per_line = rays_per_line
 		self.vertical_fov = vertical_fov
-		self.rays = self.generate_rays(offset=0)
+		self.rays = self.generate_rays(offset=offset)
 		self.current_rotation = [0, 0, 0, 1]
 		self.current_position = np.array([0, 0, 0])
 
@@ -31,8 +31,8 @@ class Virtual_Lidar:
 		rays = np.zeros((self.horizontal_lines,self.rays_per_line, 6), dtype=np.float32)
 		rays_optimized = np.zeros((self.horizontal_lines,self.rays_per_line, 6), dtype=np.float32)
 
-		rot_x = np.sin(np.linspace(0 + offset, 2*np.pi, self.rays_per_line + offset, endpoint=False))
-		rot_y = np.cos(np.linspace(0 + offset, 2*np.pi, self.rays_per_line + offset, endpoint=False))
+		rot_x = np.sin(np.linspace(0 + offset, 2*np.pi + offset, self.rays_per_line , endpoint=False))
+		rot_y = np.cos(np.linspace(0 + offset, 2*np.pi + offset, self.rays_per_line , endpoint=False))
 
 		# dz = np.cos(np.linspace((np.pi)/4, 3*np.pi/4, horizontal_lines))
 		dz = np.cos(np.linspace((np.pi)/2 - self.vertical_fov/2, (np.pi)/2 + self.vertical_fov/2, self.horizontal_lines, endpoint=True))
@@ -40,7 +40,6 @@ class Virtual_Lidar:
 		rays[:, :, 3] = rot_x * dz_scale[:, None]
 		rays[:, :, 4] = rot_y * dz_scale[:, None]
 		rays[:, :, 5] = dz[:, None]
-
 		return rays
 
 	def rotate_rays(self, xyzw, change_original=False):
@@ -84,6 +83,12 @@ class Virtual_Lidar:
 			return self.rays
 		else:
 			return self.rays + [pos[0], pos[1], pos[2], 0, 0, 0]
+		
+	def rotate_and_translate_rays(self, pos, xyzw, change_original=False):
+		# Rotate and translate the lidar rays into the global coordinate frame
+		if change_original:
+			self.rays[:, :, :3] += pos
+			
 
 	def check_unity(self, rays = None):
 		if rays is None:

@@ -6,7 +6,7 @@ import matplotlib.pyplot as plt
 from time import time, sleep
 import cv2
 from lmao.world import World
-from lmao.lidar import Lidar
+from lmao.lidar import Virtual_Lidar
 import quaternion
 from scipy.spatial.transform import Rotation as R
 from lmao.mapping import Map, get_normals
@@ -69,7 +69,7 @@ def remove_significant_differences_noangle(original_array, threshold):
 
 
 if __name__ == "__main__":
-	# Create meshes and convert to open3d.t.geometry.TriangleMesh .
+	#Create meshes and convert to open3d.t.geometry.TriangleMesh .
 	cube = o3d.geometry.TriangleMesh.create_box().translate([0, 0, 0])
 	cube.scale(2, center=cube.get_center())
 	cube = o3d.t.geometry.TriangleMesh.from_legacy(cube)
@@ -88,15 +88,15 @@ if __name__ == "__main__":
 	sphere2 = o3d.t.geometry.TriangleMesh.from_legacy(sphere2)
 	
 	# Create a world.
-	world = World()
+	#world = World()
 	# Add meshes to world.
-	world.add_mesh_to_scene([cube, torus, sphere, sphere2])
-	digital_twin = World()
-	digital_twin.add_mesh_to_scene([cube, torus, bunny, sphere2])
+	#world.add_mesh_to_scene([cube, torus, sphere, sphere2])
+	digital_twin = World("/home/junge/Documents/mesh_map/map.ply")
+	#digital_twin.add_mesh_to_scene([cube, torus, bunny, sphere2])
 
 	# Create a lidar.
-	lidar = Lidar()
-	noisy_lidar = Lidar()
+	lidar = Virtual_Lidar()
+	noisy_lidar = Virtual_Lidar()
 
 	# Translate rays.
 	lidar.translate_rays([2, 3, 0], change_original=True)
@@ -127,14 +127,14 @@ if __name__ == "__main__":
 
 
 	# Cast in the digital twin.
-	tens = o3d.core.Tensor(rotated)
-	ans = digital_twin.cast_rays(tens)
+	tens_noisy = o3d.core.Tensor(rotated)
+	ans = digital_twin.cast_rays(tens_noisy)
 	depth = ans['t_hit'].numpy()
 	
 
 	# Cast in simulated real world
 	tens_noisy = o3d.core.Tensor(rotated_noisy)
-	ans = world.cast_rays(tens_noisy)
+	#ans = world.cast_rays(tens_noisy)
 
 
 	print("Keys in ans: ", ans.keys())
@@ -150,7 +150,7 @@ if __name__ == "__main__":
 	origin = o3d.geometry.PointCloud()
 	origin.points = o3d.utility.Vector3dVector([[2, 3, 0]])
 	origin.colors = o3d.utility.Vector3dVector([[1, 0, 0]])
-	#o3d.visualization.draw_geometries([pcd, origin], point_show_normal=True)
+	o3d.visualization.draw_geometries([pcd, origin], point_show_normal=True)
 
 	# Apply numpy median filter to depth image
 	depth_noisy = ndimage.median_filter(depth_noisy, size=5)
@@ -161,16 +161,16 @@ if __name__ == "__main__":
 	# Transform depth points to world coordinates.
 	image = rotated[:,:,:3] + depth_noisy[:,:,np.newaxis]*rotated[:,:,3:]
 	
-	bagloader = BagLoader(bagpath = '/home/junge/Documents/rosbag2_sim_lidar_odom_tf/',topics = ['/points'])
-	image, depth = bagloader.get_pointcloud('/points')
-	min_depth = np.min(depth)
-	max_depth = np.max(depth)
-	print("Min depth: ", min_depth, "Max depth: ", max_depth)
+	#bagloader = BagLoader(bagpath = '/home/junge/Documents/rosbag2_sim_lidar_odom_tf/',topics = ['/points'])
+	#image, depth = bagloader.get_pointcloud('/points')
+	#min_depth = np.min(depth)
+	#max_depth = np.max(depth)
+	#print("Min depth: ", min_depth, "Max depth: ", max_depth)
 	# plt.imshow(abs(image))
 	# plt.show()
 	# plt.imshow(depth)
 	# plt.show()
-
+	exit()
 	newmap = Map()
 	t0 = time()
 	mesh = newmap.create_mesh(image, depth)

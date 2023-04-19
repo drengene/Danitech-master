@@ -28,6 +28,7 @@ class World:
 			self.world = o3d.geometry.TriangleMesh()
 
 		self.scene = o3d.t.geometry.RaycastingScene()
+		self.scene.add_triangles(o3d.t.geometry.TriangleMesh.from_legacy(self.world))
 
 	def boolean_mesh(self, mesh, boolean_operation = "union", tolerance = 1e-6):
 		# Add a mesh to the world.
