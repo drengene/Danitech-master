@@ -1,10 +1,7 @@
 import numpy as np
 
-test = np.array([1,2,3])
+test = np.array([[1,2,3],[5,4,3],[7,5,4]])
 
-arr = np.array([0, 0, 0])
-arr = np.vstack([arr, test])
+arr = np.array([3, 2, 1])
 
-print(arr)
-arr = np.vstack([arr, test])
-print(arr)
+print(np.all(np.isin(test, arr), axis=1))
