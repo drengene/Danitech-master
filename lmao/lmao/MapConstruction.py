@@ -141,7 +141,11 @@ class MapConstructor(Node):
 		# Attempt to get transform at time of message, otherwise get most recent
 		try:
 			# Get the true transform at the time of the message
-			t = self.tf_buffer.lookup_transform(self.world_frame, msg.header.frame_id, msg.header.stamp)
+			t0 = time.time()
+			t = self.tf_buffer.lookup_transform(self.world_frame, msg.header.frame_id, msg.header.stamp, rclpy.time.Duration(seconds=1))
+			if time.time() - t0 > 0.1:
+				self.get_logger().warn("Transform took {}s".format(time.time() - t0))
+			self.get_logger().info("Using true transform")
 		except TransformException as e:
 			# self.get_logger().warn("Transform error: {}, when transforming from {} to {}\n Trying most recent".format(e, msg.header.frame_id, self.world_frame))
 			t = None
@@ -150,6 +154,7 @@ class MapConstructor(Node):
 			try:
 				# Get the most recent transform
 				t = self.tf_buffer.lookup_transform(self.world_frame, msg.header.frame_id, rclpy.time.Time())
+				self.get_logger().warn("Using most recent transform")
 			except TransformException as e:
 				# self.get_logger().error("Transform error: {}, when transforming from {} to {}".format(e, msg.header.frame_id, self.world_frame))
 				return
@@ -171,8 +176,8 @@ class MapConstructor(Node):
 		angular_change = np.arccos(abs(np.dot(rotation, self.last_transform[3:])))
 
 		# If the distance is not greater than 0.1m or the angular change is not greater than 0.1 radians, return
-		if distance < 0.1 and angular_change < 0.1:
-			print("Distance: {}, Angular change: {}".format(distance, angular_change))
+		if distance < 0.5 and angular_change < 0.1:
+			# print("Distance: {}, Angular change: {}".format(distance, angular_change))
 			return
 		self.last_transform = np.array(np.concatenate((translation, rotation)))
 
@@ -251,8 +256,10 @@ class MapConstructor(Node):
 		mesh = q.get().create_mesh()
 		# Print time taken
 		self.get_logger().info("Time taken: {}".format(time.time() - t0))
-		# Show mesh
-		o3d.visualization.draw_geometries([mesh])
+
+		# Show mesh if last msg was received more than 10 seconds ago
+		if time.time() - self.last_call > 10:
+			o3d.visualization.draw_geometries([mesh])
 		# Join process
 		p.join()
 		# Save mesh to Documents

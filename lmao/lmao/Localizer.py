@@ -29,6 +29,13 @@ from tf2_ros import TransformException
 from tf2_ros.buffer import Buffer
 from tf2_ros.transform_listener import TransformListener
 
+#Import cv2
+import cv2
+
+# Create window for cv2
+cv2.namedWindow("Normals", cv2.WINDOW_NORMAL)
+
+
 class Localizer(Node):
 	def __init__(self):
 		# Init node
@@ -42,7 +49,7 @@ class Localizer(Node):
 		self.declare_parameter('max_range', 50000, ParameterDescriptor(description="Maximum range of the lidar in mm"))
 		self.declare_parameter('min_range', 2300, ParameterDescriptor(description="Minimum range of the lidar in mm"))
 		self.declare_parameter("world_frame", "world", ParameterDescriptor(description="The world frame (origin of the map)"))
-		self.declare_parameter("odom_topic", "/odom", ParameterDescriptor(description="Topic to publish odometry data to"))
+		self.declare_parameter("odom_topic", "odom", ParameterDescriptor(description="Topic to publish odometry data to"))
 
 		# Get parameters
 		self.map_path = self.get_parameter("map_path").value
@@ -68,11 +75,12 @@ class Localizer(Node):
 		self.get_logger().info("Subscribed to topic: {}".format(self.lidar_topic))
 
 
+
 	def lidar_callback(self, msg):
 		# Attempt to get transform at time of message, otherwise get most recent
 		try:
 			# Get the true transform at the time of the message
-			t = self.tf_buffer.lookup_transform(self.world_frame, msg.header.frame_id, msg.header.stamp)
+			t = self.tf_buffer.lookup_transform(self.odom_topic, msg.header.frame_id, msg.header.stamp)
 		except TransformException as e:
 			# self.get_logger().warn("Transform error: {}, when transforming from {} to {}\n Trying most recent".format(e, msg.header.frame_id, self.world_frame))
 			t = None
@@ -80,9 +88,9 @@ class Localizer(Node):
 		if t is None:
 			try:
 				# Get the most recent transform
-				t = self.tf_buffer.lookup_transform(self.world_frame, msg.header.frame_id, rclpy.time.Time())
+				t = self.tf_buffer.lookup_transform(self.odom_topic, msg.header.frame_id, rclpy.time.Time())
 			except TransformException as e:
-				# self.get_logger().error("Transform error: {}, when transforming from {} to {}".format(e, msg.header.frame_id, self.world_frame))
+				self.get_logger().error("Transform error: {}, when transforming from {} to {}".format(e, msg.header.frame_id, self.world_frame))
 				return
 
 		data = pclmao.extract_PointCloud2_data(msg)
@@ -110,22 +118,23 @@ class Localizer(Node):
 		#Shape of xyz: (1024, 128, 3)
 
 		# Get the normals
-		normals = get_normals(xyz)
-		dnormals = get_normals(normals)
-		# Show both normals and dnormals with matplotlib in the same window
-		fig, ax = plt.subplots(2, 1)
-		ax[0].imshow(normals.transpose(1, 0, 2))
-		ax[1].imshow(dnormals.transpose(1, 0, 2))
-		plt.show()
-		exit()
-		
+		normals = get_normals(xyz).transpose(1, 0, 2)
+
+		# Show normals as 2d image in opencv that updates as new data comes in
+		# Shape of normals: (1024, 128, 3)
+		# Convert to 2d image
+
+		cv2.imshow("Normals", abs(normals))
+		cv2.waitKey(1)
+		print("Drawing normals")
+
+
+				
 		# Shape of xyz: (131072, 3)
 		# Flatten array to [-1, 3]
 		xyz = xyz.reshape(-1, 3)
 		depth = depth.reshape(-1)
 		normals = normals.reshape(-1, 3)
-
-		
 
 		# Show two 
 
@@ -135,13 +144,6 @@ class Localizer(Node):
 		xyz = xyz[mask]
 		normals = normals[mask]
 		depth = depth[mask]
-
-		# Add points to point
-		with self.lock:
-			self.points = np.concatenate((self.points, np.hstack((xyz, normals))), axis=0)
-
-			# print size of points
-			self.get_logger().info("Shape of points: {}".format(self.points.shape))
 
 
 def main(args=None):

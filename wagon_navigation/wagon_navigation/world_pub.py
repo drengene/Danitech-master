@@ -59,19 +59,21 @@ class FramePublisher(Node):
 			self.handle_wagon_pose,
 			1)
 		self.pose_subscription  # prevent unused variable warning
+		self.get_logger().info('Subscribed to /wagon/' + self.wagon_name + '_pose_gt')
 
-		self.clock_sub = self.create_subscription(
-			Clock,
-			'/clock',
-			self.handle_clock,
-			1)
+		# self.clock_sub = self.create_subscription(
+		# 	Clock,
+		# 	'/clock',
+		# 	self.handle_clock,
+		# 	1)
 			
-		self.clock_sub  # prevent unused variable warning
+		# self.clock_sub  # prevent unused variable warning
+	
 
-	def handle_clock(self, msg):
-		self.secs = msg.clock.sec
-		self.nanosecs = msg.clock.nanosec
-		# print("Time: " + str(self.time))
+	# def handle_clock(self, msg):
+	# 	self.secs = msg.clock.sec
+	# 	self.nanosecs = msg.clock.nanosec
+	# 	# print("Time: " + str(self.time))
 
 
 	def handle_wagon_pose(self, msg):
@@ -79,8 +81,8 @@ class FramePublisher(Node):
 
 		# Read message content and assign it to
 		# corresponding tf variables
-		t.header.stamp.sec = self.secs
-		t.header.stamp.nanosec = self.nanosecs
+		t.header.stamp.sec = msg.header.stamp.sec
+		t.header.stamp.nanosec = msg.header.stamp.nanosec
 		t.header.frame_id = 'base_link'
 		t.child_frame_id = 'world'
 
@@ -100,8 +102,8 @@ class FramePublisher(Node):
 		inverse_rotation = R.from_matrix(inverse_transform[:3, :3])
 
 		# Print the results
-		print("Inverse Translation: ", inverse_translation)
-		print("Inverse Rotation: ", inverse_rotation.as_euler('xyz', degrees=True))
+		#print("Inverse Translation: ", inverse_translation)
+		#print("Inverse Rotation: ", inverse_rotation.as_euler('xyz', degrees=True))
 
 		# Assign the translation and rotation to the
 		# transform message
