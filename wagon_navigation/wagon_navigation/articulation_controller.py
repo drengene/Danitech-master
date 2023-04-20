@@ -37,6 +37,7 @@ class articulationController(Node):
         self.declare_parameter('odom_frame', 'odom', ParameterDescriptor(description="Odometry frame name"))
         self.declare_parameter('world_frame', 'odom', ParameterDescriptor(description="World frame name"))
         self.declare_parameter('path_update_rate', 2, ParameterDescriptor(description="Update rate in Hz of the path generation"))
+        self.declare_parameter('manual_waypoints', False, ParameterDescriptor(description="If true, waypoints are manually set by the user"))
 
         self.cmd_vel_topic = self.get_parameter('cmd_vel_topic').value
         # self.joint_state_topic = self.get_parameter('joint_state_topic').value
@@ -44,6 +45,7 @@ class articulationController(Node):
         self.odom_frame = self.get_parameter('odom_frame').value
         self.world_frame = self.get_parameter('world_frame').value
         self.path_update_rate = self.get_parameter('path_update_rate').value
+        manual = self.get_parameter('manual_waypoints').value
 
         # declare parameters from the parameters above
         self.base_poses = np.array([0, 0, 0])
@@ -55,37 +57,36 @@ class articulationController(Node):
         
         self.secs = 0
         self.nanosecs = 0
-        manual = True
         self.old_dist = np.inf
         self.waypoints = None
         self.goal_position = None
         self.waypoint_index = 0
         self.base_link_position = None
-
-
+        self.global_plan_points = None
         self.wayposes = None
-        if waypoints is not None:
+        if waypoints is None:
             if manual:
                 # self.waypoints = np.array([[8.50931,3.333,0.0],[10.20931,2.333,0.0], [14.20931,6.333,0.0], [20.20931,6.333,0.0], [26.20931,6.333,0.0], [28.20931,2.533,0.0], [30.20931,2.533,0.0], [32.20931,6.533,0.0]])
                 self.waypoints = np.array([[6.314, 1.616, 0.0], [13.768, 1.616, 0.0], [19.326, -1.1029, 0.0], [20.02, -4.45, 0.284], [19.75, -11.98, 1.665], [19.285, -18.48, 2.84], [18.45, -23.215, 3.215], [11.90, -24.39, 3.215],[-3.45, -22.88, 3.215],[-3.25, -17.00, 2.59], [-3.93, -9.92, 1.28], [-3.85, -3.28, 0.07], [1.726, 0.75, 0.0], [5.34, 2.355, 0.0]])
                 self.setup_sub_pub()
                 self.gen_init_path(self.waypoints)
+                exit()
             else:
+                print("Waiting for goal position or path")
                 self.setup_sub_pub()
                 self.wait_for_goal()
         else:
             self.waypoints = waypoints
             
-
-    def run(self):
-        self.setup_sub_pub()
-        self.gen_init_path(self.waypoints)
-
     def wait_for_goal(self):
 
         if np.any(self.goal_position):
             print("Goal position received: ", self.goal_position)
             self.gen_init_path(np.array([self.goal_position]))
+        elif np.any(self.waypoints):
+            self.gen_init_path(self.waypoints)
+            print("Wayposes received: ")
+            return
         sleep(0.5)
         return
 
@@ -94,6 +95,7 @@ class articulationController(Node):
     def gen_init_path(self, _waypoints):
 
         self.og_waypoints = deepcopy(_waypoints)
+
 
         while self.base_link_position is None:
             # Spin once
@@ -113,7 +115,6 @@ class articulationController(Node):
                                                     self.base_link_position[1] + 2 * np.sin(self.base_link_orientation[2]),
                                                       self.base_link_position[2]], axis=0)
 
-
         self.spline = self.gen_spline(_waypoints, 2)
 
         # create a copy of waypoints with 4 additional dimensions
@@ -125,12 +126,14 @@ class articulationController(Node):
         # calculate the direction of travel for each waypoint
         for i in range(1, len(self.spline)):
             self.wayposes[i-1,3:7] = self.quaternion_from_two_vectors(self.spline[i-1], self.spline[i])
+        
 
         #print(self.wayposes)   
         # self.next_position = np.array([8.20931,3.333,0.0])
         self.send_wayposes(self.wayposes)
 
         self.waypoints = self.spline
+
         
 
         # self.direction = FORWARDS
@@ -144,6 +147,7 @@ class articulationController(Node):
         self.twist_publisher = self.create_publisher(Twist, self.cmd_vel_topic, 10)
         self.path_subscriber = self.create_subscription(PoseArray, "/path", self.path_callback, 10)
         self.clock_sub = self.create_subscription(Clock, "/clock", self.clock_callback, 10)
+        self.global_plan_sub = self.create_subscription(PoseArray, "/global_plan", self.global_plan_callback, 10)
         self.update_timer = self.secs + self.nanosecs * 1e-9
         
         # spin for a bit to get the first message
@@ -151,8 +155,8 @@ class articulationController(Node):
             rclpy.spin_once(self, timeout_sec=0.1)
 
 
-        #self.base_link_pose_sub = self.create_subscription(Odometry, "/wagon/base_link_pose_gt", self.base_link_pose_callback, 10)
-        self.base_link_pose_sub = self.create_subscription(Odometry, "/odometry/local", self.base_link_pose_callback, 10)
+        self.base_link_pose_sub = self.create_subscription(Odometry, "/wagon/base_link_pose_gt", self.base_link_pose_callback, 10)
+        #self.base_link_pose_sub = self.create_subscription(Odometry, "/odometry/local", self.base_link_pose_callback, 10)
 
         self.base_link_pose_sub  # prevent unused variable warning
 
@@ -170,7 +174,16 @@ class articulationController(Node):
 
 
 
+    def global_plan_callback(self, msg):
+        self.global_plan = msg
+        print("Global plan received")
+        self.waypoints = np.zeros((len(msg.poses), 3))
 
+        for i, pose in enumerate(msg.poses):
+            self.waypoints[i,:] = [pose.position.x, pose.position.y, pose.position.z]
+
+        print(np.shape(self.waypoints))
+        self.destroy_subscription(self.global_plan_sub)
 
     def clock_callback(self, msg):
         self.secs = msg.clock.sec
@@ -347,18 +360,39 @@ class articulationController(Node):
         # Create a cubic spline interpolation of the points
         interp = CubicSpline(cumulative_distances, points, bc_type='not-a-knot')
  
-        # Generate points along the curve at the specified resolution
+        # Generate points along the curve at the specified resolution 
+        # - there are issues if the supplied points are at a higher resolution than the desired output
+
+        print(distances)
+        print(np.min(distances))
+
         s_vals = np.array([])
-        for idx, dist in enumerate(cumulative_distances[:-1], ):
-            num_points = int(np.ceil((cumulative_distances[idx + 1] - dist)/resolution))
-            # print(num_points)
-            s_val = np.linspace(dist, cumulative_distances[idx + 1], num_points)
-            s_vals = np.append(s_vals, s_val[1:])
+
+        if resolution*0.9 <= np.min(distances):
+            print("resolution smaller than min distance")
+            for idx, dist in enumerate(cumulative_distances[:-1], ):
+                num_points = int(np.ceil((cumulative_distances[idx + 1] - dist)/resolution))
+                # print(num_points)
+                s_val = np.linspace(dist, cumulative_distances[idx + 1], num_points)
+                s_vals = np.append(s_vals, s_val[1:])
+        else:
+            print("resolution larger than min distance")
+            intermediate_dist = 0.0
+            for idx, dist in enumerate(distances[:-1], ):
+                intermediate_dist += dist
+                print("intermediate_dist", intermediate_dist, resolution)
+                if intermediate_dist >= resolution:
+                    s_vals = np.append(s_vals, cumulative_distances[idx])
+                    intermediate_dist = 0.0
+
+
+        print("s_vals", s_vals)
 
         # Generate 10 points along the curve
         interp_points = interp(s_vals)
 
         return interp_points
+
     
 
     def quaternion_from_two_vectors(self, point1, point2):

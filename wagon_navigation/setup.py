@@ -21,6 +21,7 @@ setup(
     entry_points={
         'console_scripts': [
             'articulation_controller = wagon_navigation.articulation_controller:main',
+            'global_planner = wagon_navigation.global_planner:main',
             'world_tf_pub = wagon_navigation.world_pub:main'
         ],
     },

@@ -4,7 +4,10 @@ import sys
 import heapq
 import time
 import copy
-from articulation_controller import articulationController
+import rclpy
+from rclpy.node import Node
+from rosgraph_msgs.msg import Clock
+from geometry_msgs.msg import Twist, Pose, PoseArray
 
 
 class global_planner():
@@ -24,20 +27,20 @@ class global_planner():
         else:
             self.determine_valid_vertices(0.8, 2, "/home/daniel/Documents/master/")
         
-        self.start_stop_chooser(self.mesh_map)
+        #self.start_stop_chooser(self.mesh_map)
+        self.points = np.array([50970, 558829])
 
         path = self.a_star(self.adj_list, self.points[0], self.points[1]) # start at 7000
         if path is None:
             print("No path found")
             sys.exit()
         
-        global_waypoints = self.convert_path(path)
+        self.global_waypoints = self.convert_path(path)
+        
+        #self.color_path(normal_mesh, path)
 
-        self.color_path(normal_mesh, path)
-
-        self.articulation_controller = articulationController(global_waypoints)
-        self.articulation_controller.run()
-
+    def get_global_waypoints(self):
+        return self.global_waypoints
 
     def load_ply_file(self, file_path):
         self.mesh_map = o3d.io.read_triangle_mesh(file_path)
@@ -303,14 +306,65 @@ class global_planner():
 
         return global_path
 
+    def send_to_local_planner(self):
+        # Send the path to the local planner
+
+        pass
+
+
+class ros_planner(Node):
+    def __init__(self, plan):
+        super().__init__('ros_planner')
+        self.path_pub = self.create_publisher(PoseArray, 'global_plan', 10)
+        #self.clock_sub = self.create_subscription(Clock, 'clock', self.clock_callback, 10)
+        #rclpy.spin_once(Node)
+        # self.path_publisher(plan)
+        while True:
+            self.path_publisher(plan)
+            time.sleep(1)
+            self.get_logger().info('Publishing path')
+
+
+    def clock_callback(self, msg):
+        self.secs = msg.clock.sec
+        self.nanosecs = msg.clock.nanosec
+        self.time = self.secs + self.nanosecs * 1e-9
+
+    def path_publisher(self, plan):
+        path = PoseArray()
+        path.header.frame_id = "map"
+        path.header.stamp = self.get_clock().now().to_msg()
+        # path.header.stamp.sec = self.secs
+        # path.header.stamp.nanosec = self.nanosecs
+
+        for i in range(len(plan)):
+            pose = Pose()
+            pose.position.x = plan[i][0]
+            pose.position.y = plan[i][1]
+            pose.position.z = plan[i][2]
+            path.poses.append(pose)
+
+        self.path_pub.publish(path)
+        # Add empty 
 
 
 
 def main():
-#    global_planner("/home/daniel/Documents/master/isaac_map.ply", "/home/daniel/Documents/master/valid_points.npy")
-    global_planner("/home/daniel/Documents/master/isaac_map.ply", "/home/daniel/Documents/master/valid_points_0.8_2.npy")
+    # global_planner("/home/daniel/Documents/master/isaac_map.ply", "/home/daniel/Documents/master/valid_points.npy")
+    # global_planner("/home/daniel/Documents/master/isaac_map.ply", "/home/daniel/Documents/master/valid_points_0.8_2.npy")
+    planner = global_planner("/home/danitech/master_ws/src/Danitech-master/wagon_navigation/wagon_navigation/pose_data/isaac_map.ply", "/home/danitech/master_ws/src/Danitech-master/wagon_navigation/wagon_navigation/pose_data/valid_points_0.8_2.npy")
     #global_planner("/home/daniel/Documents/master/isaac_map.ply", False)
+    rclpy.init()
+    ros_planner(planner.get_global_waypoints())
 
+    try:
+
+        rclpy.spin(ros_planner)
+        time.sleep(1)
+
+    except KeyboardInterrupt:
+        pass    
+    ros_planner.destroy_node()
 
 
 if __name__ == "__main__":
