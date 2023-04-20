@@ -24,10 +24,13 @@ class World:
 			if not os.path.isfile(world_file):
 				raise FileNotFoundError("World file not found.")
 			self.world = o3d.io.read_triangle_mesh(world_file)
+			print("World loaded from file: ", world_file)
 		else:
 			self.world = o3d.geometry.TriangleMesh()
+			print("Empty world created.")
 
 		self.scene = o3d.t.geometry.RaycastingScene()
+		self.scene.add_triangles(o3d.t.geometry.TriangleMesh.from_legacy(self.world))
 
 	def boolean_mesh(self, mesh, boolean_operation = "union", tolerance = 1e-6):
 		# Add a mesh to the world.
