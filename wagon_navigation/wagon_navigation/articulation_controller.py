@@ -28,7 +28,7 @@ MAX_VEL = 2
 
 class articulationController(Node):
     
-    def __init__(self):
+    def __init__(self, waypoints=None):
         super().__init__('articulation_controller')
 
         # Declare parameters related to topic names
@@ -60,21 +60,26 @@ class articulationController(Node):
         self.waypoints = None
         self.goal_position = None
         self.waypoint_index = 0
+        self.base_link_position = None
+
 
         self.wayposes = None
-        if manual:
-            # self.waypoints = np.array([[8.50931,3.333,0.0],[10.20931,2.333,0.0], [14.20931,6.333,0.0], [20.20931,6.333,0.0], [26.20931,6.333,0.0], [28.20931,2.533,0.0], [30.20931,2.533,0.0], [32.20931,6.533,0.0]])
-            self.waypoints = np.array([[6.314, 1.616, 0.0], [13.768, 1.616, 0.0], [19.326, -1.1029, 0.0], [20.02, -4.45, 0.284], [19.75, -11.98, 1.665], [19.285, -18.48, 2.84], [18.45, -23.215, 3.215], [11.90, -24.39, 3.215],[-3.45, -22.88, 3.215],[-3.25, -17.00, 2.59], [-3.93, -9.92, 1.28], [-3.85, -3.28, 0.07], [1.726, 0.75, 0.0], [5.34, 2.355, 0.0]])
-            self.base_link_position = None
-            self.waypoint_index = 0
-            self.setup_sub_pub()
-            self.gen_init_path(self.waypoints)
+        if waypoints is not None:
+            if manual:
+                # self.waypoints = np.array([[8.50931,3.333,0.0],[10.20931,2.333,0.0], [14.20931,6.333,0.0], [20.20931,6.333,0.0], [26.20931,6.333,0.0], [28.20931,2.533,0.0], [30.20931,2.533,0.0], [32.20931,6.533,0.0]])
+                self.waypoints = np.array([[6.314, 1.616, 0.0], [13.768, 1.616, 0.0], [19.326, -1.1029, 0.0], [20.02, -4.45, 0.284], [19.75, -11.98, 1.665], [19.285, -18.48, 2.84], [18.45, -23.215, 3.215], [11.90, -24.39, 3.215],[-3.45, -22.88, 3.215],[-3.25, -17.00, 2.59], [-3.93, -9.92, 1.28], [-3.85, -3.28, 0.07], [1.726, 0.75, 0.0], [5.34, 2.355, 0.0]])
+                self.setup_sub_pub()
+                self.gen_init_path(self.waypoints)
+            else:
+                self.setup_sub_pub()
+                self.wait_for_goal()
         else:
-            self.setup_sub_pub()
-            self.wait_for_goal()
+            self.waypoints = waypoints
             
 
-
+    def run(self):
+        self.setup_sub_pub()
+        self.gen_init_path(self.waypoints)
 
     def wait_for_goal(self):
 

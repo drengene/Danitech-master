@@ -4,10 +4,11 @@ import sys
 import heapq
 import time
 import copy
+from articulation_controller import articulationController
 
 
 class global_planner():
-    def __init__(self, file_path):
+    def __init__(self, file_path, load_valid_points_from_path=False):
         self.load_ply_file(file_path)
         self.convert_to_tensor()
         
@@ -15,18 +16,27 @@ class global_planner():
 
         normal_mesh = self.get_normals(self.mesh_map)
 
-        self.start_stop_chooser(self.mesh_map)
 
         self.adj_list = self.adjacency_list(self.mesh_map)
 
-        self.determine_valid_vertices(0.8)
+        if load_valid_points_from_path:
+            self.load_valid_verticies(load_valid_points_from_path)
+        else:
+            self.determine_valid_vertices(0.8, 2, "/home/daniel/Documents/master/")
+        
+        self.start_stop_chooser(self.mesh_map)
 
         path = self.a_star(self.adj_list, self.points[0], self.points[1]) # start at 7000
         if path is None:
             print("No path found")
             sys.exit()
+        
+        global_waypoints = self.convert_path(path)
 
         self.color_path(normal_mesh, path)
+
+        self.articulation_controller = articulationController(global_waypoints)
+        self.articulation_controller.run()
 
 
     def load_ply_file(self, file_path):
@@ -64,19 +74,18 @@ class global_planner():
         for i in range(len(adj_list)):
             adj_list[i] = np.asarray(list(adj_list[i]))
 
-        print("adjacency list: \n", adj_list) 
-        print("adjacency list index: \n", adj_list[1][1])
-
+        # print("adjacency list: \n", adj_list) 
+        # print("adjacency list index: \n", adj_list[1][1])
 
         return adj_list
-        #path = self.dijkstra(mesh.adjacency_list, 32500, 32000)
-        
-        # path = np.asarray(path)
-        # self.path = path[:,1].astype(int)
+
 
 
     # def path_to_lineset(self, path):
-    def determine_valid_vertices(self, normal_z_threshold):
+    def load_valid_verticies(self, file_path="/home/daniel/Documents/master/valid_points.npy"):
+        self.valid_points = np.load(file_path)
+
+    def determine_valid_vertices(self, normal_z_threshold, invalidation_radius=1, path="/home/daniel/Documents/master/"):
         self.valid_points = np.ones(self.verticies.shape[0])
         self.visited_points = np.ones(self.verticies.shape[0]) * -1
 
@@ -84,25 +93,40 @@ class global_planner():
         print("valid points: ", np.count_nonzero(self.valid_points))
         invalid_points = np.where(self.valid_points == 0)[0] # create list of "hard" invalid point indexes
 
+        sys.setrecursionlimit(2000)
+
+        # Can possibly be optimized by only looking at invalid points that have valid points as neighbors
         for point_idx in invalid_points:
-            #print("invalid point: ", point_idx)
+            print("invalid point: ", point_idx)
             self.recursive_i = 0
-            self.invalidate_in_radius(self.adj_list, 1, point_idx, point_idx) # point_idx is given twice, since we have to compare the distance from the oringal invalid point
+            self.invalidate_in_radius(self.adj_list, invalidation_radius, point_idx, point_idx) # point_idx is given twice, since we have to compare the distance from the oringal invalid point
             #print("recursive calls: ", self.recursive_i)
 
         print("valid points after recursion: ", np.count_nonzero(self.valid_points))
 
+        # Save the valid points to a npy file
+        filename = "valid_points" + "_" + str(normal_z_threshold) + "_" + str(invalidation_radius) + ".npy"
+        print("saving points to filename", path, filename)
+        np.save(path + filename, self.valid_points)
+
+
     def invalidate_in_radius(self, adj_list, radius, point_idx, neighbor_idx):
         self.recursive_i += 1
-        if self.visited_points[point_idx] == point_idx:
+        if self.visited_points[neighbor_idx] == point_idx:
             return
         
-        self.visited_points[point_idx] = point_idx
+        self.visited_points[neighbor_idx] = point_idx
 
-        if np.linalg.norm(self.verticies[neighbor_idx] - self.verticies[point_idx]) > radius:
+
+        dist = np.linalg.norm(self.verticies[neighbor_idx] - self.verticies[point_idx])
+        # print("vertxe val_n", self.verticies[neighbor_idx], "neighbor_idx", neighbor_idx)
+        # print("vertxe val_p", self.verticies[point_idx], "point_idx", point_idx)
+
+        if dist > radius:
             return
         
         self.valid_points[neighbor_idx] = 0
+
 
         for neighbor in adj_list[neighbor_idx]:
             self.invalidate_in_radius(adj_list, radius, point_idx, neighbor)
@@ -166,6 +190,7 @@ class global_planner():
 
     def start_stop_chooser(self, mesh):
         print("Select start and stop points by holding shift, then clicking on the desired points")
+        self.points = np.array([], dtype=int)
         self.vis = o3d.visualization.VisualizerWithVertexSelection()
         self.vis.create_window()
         self.vis.add_geometry(mesh)
@@ -174,23 +199,30 @@ class global_planner():
 
     def start_stop_handler(self):
         print(self.vis.get_render_option())
-        points= self.vis.get_picked_points()
-        print("picked points: ", points[0].index)
-        if len(points) == 2:
+        picked_points= self.vis.get_picked_points()
+        print("picked points: ", picked_points[0].index)
+        if (self.valid_points[picked_points[0].index] == 0):
+            print("Invalid point chosen. Please choose a new point further from a wall.")
+
+        else:
+            print("valid point chosen")
+            self.points = np.append(self.points, int(picked_points[0].index))
+            print("Current points: ", self.points)
+        
+        if len(self.points) == 2:
             self.vis.destroy_window()
-            self.points = np.array([points[0].index, points[1].index])
 
 
     
 
     def check_neighbor_feasibility(self, adj_list, vertex_index, neighbor_index):
         # check if the neighbor is a wall
-        normals_diff = abs(self.vertex_normals[vertex_index][2] - self.vertex_normals[neighbor_index][2])
+        # normals_diff = abs(self.vertex_normals[vertex_index][2] - self.vertex_normals[neighbor_index][2])
 
 
 
         #if self.vertex_normals[neighbor_index][2] > 0.8 and normals_diff < 0.2:
-        if self.valid_points[vertex_index] == 1:
+        if self.valid_points[neighbor_index] == 1:
             return True
         else:
             return False
@@ -219,13 +251,6 @@ class global_planner():
         if np.all(self.triangle_normals[tri_loc][:,2]) > 0.8:
             print(self.vertex_normals[neighbor_index][2])
 
-    def reconstruct_path(self, came_from, current):
-        total_path = [current]
-        while current in came_from[:,1]:
-            current = came_from[current]
-            total_path.append(current)
-        return total_path
-    
     def heuristic_cost_estimate(self, start_idx, end_idx):
 
         start = self.verticies[start_idx]
@@ -269,40 +294,22 @@ class global_planner():
                     heapq.heappush(frontier, neighbor_node)
         
         return None
+    
+    def convert_path(self, path):
 
-    def dijkstra(self, adjacency_list, start, end):
-        # Initialize the distance of all nodes to infinity
-        num_nodes = len(adjacency_list)
-        distance = [float('inf')] * num_nodes
-        distance[start] = 0
-        
-        # Use a min heap to keep track of nodes with smallest distance
-        heap = [(0, start)]
-        
-        while heap:
-            # Get the node with the smallest distance
-            curr_dist, curr_node = heapq.heappop(heap)
-            
-            # If we've reached the end node, return the shortest distance
-            if curr_node == end:
-                return heap
-            
-            #print("curr_node: ", curr_node)
-            #print("adjacency_list[curr_node]: ", adjacency_list[curr_node]  )
-            # Otherwise, update the distances of adjacent nodes
-            #print("heap: ", heap)
-            for neighbor in adjacency_list[curr_node]:
-                #print("neighbor: ", neighbor)
-                new_dist = curr_dist + np.linalg.norm(curr_node-neighbor)
-                if new_dist < distance[neighbor]:
-                    distance[neighbor] = new_dist
-                    heapq.heappush(heap, (new_dist, neighbor))
-        
-        # If we've searched the entire graph and haven't found the end node, return None
-        return None
+        global_path = self.verticies[path]
+        print(global_path)
+
+
+        return global_path
+
+
+
 
 def main():
-    global_planner("/home/daniel/Documents/master/isaac_map.ply")
+#    global_planner("/home/daniel/Documents/master/isaac_map.ply", "/home/daniel/Documents/master/valid_points.npy")
+    global_planner("/home/daniel/Documents/master/isaac_map.ply", "/home/daniel/Documents/master/valid_points_0.8_2.npy")
+    #global_planner("/home/daniel/Documents/master/isaac_map.ply", False)
 
 
 
