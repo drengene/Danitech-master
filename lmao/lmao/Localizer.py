@@ -65,6 +65,42 @@ class Localizer(Node):
 
 		# Load map
 		self.world = World.World(self.map_path)
+		#points = self.world.get_random_points(100)
+		self.particles = self.world.get_probable_random_points(1000)
+		# Create random orientations for the particles with a uniform distribution for the yaw, but normal distribution for the pitch and roll
+		yaw = np.random.uniform(0, 2*np.pi, self.particles.shape[0])
+		pitch = np.random.normal(0, np.pi/20, self.particles.shape[0])
+		roll = np.random.normal(0, np.pi/20, self.particles.shape[0])
+		# Display roll pitch and yaw in 3 graphs
+		plt.subplot(1, 3, 1)
+		plt.hist(roll, bins=50)
+		plt.title("Roll")
+		plt.subplot(1, 3, 2)
+		plt.hist(pitch, bins=50)
+		plt.title("Pitch")
+		plt.subplot(1, 3, 3)
+		plt.hist(yaw, bins=50)
+		plt.title("Yaw")
+		plt.show()
+
+		# Convert the particles to quaternions
+		quats = R.from_euler("xyz", np.vstack((roll, pitch, yaw)).T).as_quat()
+
+		# Convert quats to a direction vector, by rotating [1, 0, 0]
+		dir_vecs = R.from_quat(quats).apply([1, 0, 0])
+
+		# Create pcd from the particles
+		pcd = o3d.geometry.PointCloud()
+		pcd.points = o3d.utility.Vector3dVector(self.particles)
+		pcd.normals = o3d.utility.Vector3dVector(dir_vecs)
+		pcd.paint_uniform_color([0, 0, 1])
+		o3d.visualization.draw_geometries([pcd, self.world.world], point_show_normal=True)
+		
+		# Add the quaternions to the particles
+		self.particles = np.hstack((self.particles, quats))
+
+		print("Particles shape: {}".format(self.particles.shape))
+
 		self.get_logger().info("Loaded map from: {}".format(self.map_path))
 		self.lidar = Lidar.Virtual_Lidar(offset=+3*np.pi/2)
 		self.get_logger().info("Created lidar object")
@@ -170,8 +206,8 @@ class Localizer(Node):
 		# Apply gaussian filter to depth gradient
 		depth_gradient = ndimage.gaussian_filter(depth_gradient, sigma=1.0)
 		
-		plt.imshow(depth_gradient)
-		plt.show()
+		#plt.imshow(depth_gradient)
+		#plt.show()
 
 
 		#Scale depth gradient to 0-1
