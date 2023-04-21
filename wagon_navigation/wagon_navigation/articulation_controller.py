@@ -274,11 +274,12 @@ class articulationController(Node):
         next_point_weight = 1 - point_weight
 
         if direction == BACKWARDS:
-            if len(self.waypoints) < self.waypoint_index + 10:
+            if len(self.waypoints) < self.waypoint_index + 2:
                 lookahead_nums = len(self.waypoints) - self.waypoint_index
             else:
-                lookahead_nums = 10
+                lookahead_nums = 2
             waypoint_dists = np.linalg.norm(self.base_link_position - self.waypoints[self.waypoint_index:self.waypoint_index + lookahead_nums], axis=1)
+
             print("waypoint_dists: ", waypoint_dists)
             min_dist_index = np.argmin(waypoint_dists)
             print("min_dist_index: ", min_dist_index, " dist", waypoint_dists[min_dist_index])
@@ -380,20 +381,18 @@ class articulationController(Node):
             intermediate_dist = 0.0
             for idx, dist in enumerate(distances[:-1], ):
                 intermediate_dist += dist
-                print("intermediate_dist", intermediate_dist, resolution)
                 if intermediate_dist >= resolution:
                     s_vals = np.append(s_vals, cumulative_distances[idx])
                     intermediate_dist = 0.0
 
 
-        print("s_vals", s_vals)
 
         # Generate 10 points along the curve
         interp_points = interp(s_vals)
 
         return interp_points
 
-    
+     
 
     def quaternion_from_two_vectors(self, point1, point2):
 
