@@ -39,7 +39,6 @@ cv2.namedWindow("Normals", cv2.WINDOW_NORMAL)
 cv2.namedWindow("Virtual normals", cv2.WINDOW_NORMAL)
 cv2.namedWindow("Probabilities", cv2.WINDOW_NORMAL)
 
-
 class Localizer(Node):
 	def __init__(self):
 		# Init node
@@ -85,6 +84,7 @@ class Localizer(Node):
 
 		# Convert the particles to quaternions
 		quats = R.from_euler("xyz", np.vstack((roll, pitch, yaw)).T).as_quat()
+		self.rotations = R.from_quat(quats)
 
 		# Convert quats to a direction vector, by rotating [1, 0, 0]
 		dir_vecs = R.from_quat(quats).apply([1, 0, 0])
@@ -116,6 +116,19 @@ class Localizer(Node):
 		# Create the subscriber
 		self.create_subscription(PointCloud2, self.lidar_topic, self.lidar_callback, 10)
 		self.get_logger().info("Subscribed to topic: {}".format(self.lidar_topic))
+
+
+	def get_lidar_rays(self, rays):
+		new_rays = np.zeros((self.particles.shape[0], 6))
+		#new_directions = self.rotations.apply(rays)
+		# Rotate the ray directions to the particles
+		new_rays[:, :3] = self.rotations.apply(rays)
+		# Create a new origo for each ray, using the particles as origo
+		new_origo = np.repeat(self.particles[:, :3], rays.shape[0], axis=0)
+		# Add the new origo to the new directions
+		new_rays[:, 3:] = new_origo
+		new_rays[:, :3] += new_origo
+		return new_rays
 
 
 
@@ -247,8 +260,6 @@ class Localizer(Node):
 		xyz = xyz.reshape(-1, 3)
 		depth = depth.reshape(-1)
 		normals = normals.reshape(-1, 3)
-
-		# Show two 
 
 
 		# Remove points that are too far away or are zero

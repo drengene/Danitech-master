@@ -29,7 +29,7 @@ class Virtual_Lidar:
 
 	def generate_rays(self, offset = 0):
 		rays = np.zeros((self.horizontal_lines,self.rays_per_line, 6), dtype=np.float32)
-		rays_optimized = np.zeros((self.horizontal_lines,self.rays_per_line, 6), dtype=np.float32)
+		#rays_optimized = np.zeros((self.horizontal_lines,self.rays_per_line, 6), dtype=np.float32)
 
 		rot_x = np.sin(np.linspace(0 + offset, 2*np.pi + offset, self.rays_per_line , endpoint=False))
 		rot_y = np.cos(np.linspace(0 + offset, 2*np.pi + offset, self.rays_per_line , endpoint=False))

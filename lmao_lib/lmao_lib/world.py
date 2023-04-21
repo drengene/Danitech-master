@@ -130,11 +130,11 @@ class World:
 		# Show world and points
 		#o3d.visualization.draw_geometries([world, pcd])
 
-		return np.asarray(pcd.points)
 	
 		# Show world
-		#o3d.visualization.draw_geometries([world, non_manifold_vertices, non_manifold_edges])
+		o3d.visualization.draw_geometries([world, non_manifold_vertices, non_manifold_edges])
 
+		return np.asarray(pcd.points)
 
 			
 
