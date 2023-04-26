@@ -62,73 +62,103 @@ class Localizer(Node):
 		self.world_frame = self.get_parameter("world_frame").value
 		self.odom_topic = self.get_parameter("odom_topic").value
 
-		# Load map
-		self.world = World.World(self.map_path)
-		#points = self.world.get_random_points(100)
-		self.particles = self.world.get_probable_random_points(1000)
-		# Create random orientations for the particles with a uniform distribution for the yaw, but normal distribution for the pitch and roll
-		yaw = np.random.uniform(0, 2*np.pi, self.particles.shape[0])
-		pitch = np.random.normal(0, np.pi/20, self.particles.shape[0])
-		roll = np.random.normal(0, np.pi/20, self.particles.shape[0])
-		# Display roll pitch and yaw in 3 graphs
-		plt.subplot(1, 3, 1)
-		plt.hist(roll, bins=50)
-		plt.title("Roll")
-		plt.subplot(1, 3, 2)
-		plt.hist(pitch, bins=50)
-		plt.title("Pitch")
-		plt.subplot(1, 3, 3)
-		plt.hist(yaw, bins=50)
-		plt.title("Yaw")
-		plt.show()
-
-		# Convert the particles to quaternions
-		quats = R.from_euler("xyz", np.vstack((roll, pitch, yaw)).T).as_quat()
-		self.rotations = R.from_quat(quats)
-
-		# Convert quats to a direction vector, by rotating [1, 0, 0]
-		dir_vecs = R.from_quat(quats).apply([1, 0, 0])
-
-		# Create pcd from the particles
-		pcd = o3d.geometry.PointCloud()
-		pcd.points = o3d.utility.Vector3dVector(self.particles)
-		pcd.normals = o3d.utility.Vector3dVector(dir_vecs)
-		pcd.paint_uniform_color([0, 0, 1])
-		o3d.visualization.draw_geometries([pcd, self.world.world], point_show_normal=True)
-		
-		# Add the quaternions to the particles
-		self.particles = np.hstack((self.particles, quats))
-
-		print("Particles shape: {}".format(self.particles.shape))
-
-		self.get_logger().info("Loaded map from: {}".format(self.map_path))
-		self.lidar = Lidar.Virtual_Lidar(offset=+3*np.pi/2)
-		self.get_logger().info("Created lidar object")
-
 		# Create tf2 buffer and listener
 		self.tf_buffer = Buffer()
 		self.tf_listener = TransformListener(self.tf_buffer, self)
-
-				# Create publisher
+		
+		# Create publisher
 		self.odom_pub = self.create_publisher(Odometry, self.odom_topic, 10)
 		self.get_logger().info("Publishing odometry data to topic: {}".format(self.odom_topic))
 
 		# Create the subscriber
 		self.create_subscription(PointCloud2, self.lidar_topic, self.lidar_callback, 10)
 		self.get_logger().info("Subscribed to topic: {}".format(self.lidar_topic))
+		
+		# Load map
+		self.world = World.World(self.map_path)
+		self.get_logger().info("Loaded map from: {}".format(self.map_path))
+		#points = self.world.get_random_points(100)
+		
+		# Create lidar object
+		self.lidar = Lidar.Virtual_Lidar(offset=3*(np.pi/2))
+		self.get_logger().info("Created lidar object")
+
+		# Create particles
+		self.init_particles(100, visualize=True)
 
 
-	def get_lidar_rays(self, rays):
-		new_rays = np.zeros((self.particles.shape[0], 6))
+	def get_particle_lidar_rays(self, rays):
+		assert rays.shape[1] == 6, "Rays must be shape [n, 6]"
+
+		new_rays = np.zeros((self.particles.shape[0]*rays.shape[0], 6))
 		#new_directions = self.rotations.apply(rays)
 		# Rotate the ray directions to the particles
-		new_rays[:, :3] = self.rotations.apply(rays)
+		for i, r in enumerate(self.rotations):
+			new_rays[i*rays.shape[0]:(i+1)*rays.shape[0], 3:] = r.apply(rays[:, 3:])
+		#new_rays[:, :3] = self.rotations.apply(rays)
+
 		# Create a new origo for each ray, using the particles as origo
 		new_origo = np.repeat(self.particles[:, :3], rays.shape[0], axis=0)
 		# Add the new origo to the new directions
-		new_rays[:, 3:] = new_origo
-		new_rays[:, :3] += new_origo
-		return new_rays
+		new_rays[:, :3] = new_origo
+		#new_rays[:, :3] += new_origo
+		print("New rays shape: {}".format(new_rays.shape))
+		return new_rays.astype(np.float32)
+	
+
+	def raycast_particles(self, target_rays): # Target rays are the rays in the lidar frame. Should be shape [n, 6]
+		assert target_rays.shape[1] == 6, "Target rays must be shape [n, 6]"
+		# Transform the rays for each particle
+		rays = self.get_particle_lidar_rays(target_rays)
+
+		print("Casting {} rays".format(rays.shape[0]))
+		t0 = time.time()
+		raycast = self.world.scene.cast_rays(rays)
+		raycast_depth =raycast["t_hit"].numpy()
+		raycast_normals = raycast['primitive_normals'].numpy()
+		print("Time to cast rays: {}".format(time.time()-t0))
+
+		# Reshape the raycast
+		raycast_normals = raycast_normals.reshape(self.n_particles, -1, 3) # Was (n_particles, 128, 1024, 3)
+		raycast_depth = raycast_depth.reshape(self.n_particles, -1, 1) # Was (n_particles, 128, 1024, 1)
+		return raycast_depth*1000, raycast_normals
+
+
+	def init_particles(self, n, visualize=False):
+		# Create particles
+		self.n_particles = n
+		self.particles = self.world.get_probable_random_points(self.n_particles)
+		# Create random orientations for the particles with a uniform distribution for the yaw, but normal distribution for the pitch and roll
+		yaw = np.random.uniform(0, 2*np.pi, self.n_particles)
+		pitch = np.random.normal(0, np.pi/20, self.n_particles)
+		roll = np.random.normal(0, np.pi/20, self.n_particles)
+
+		# Convert the particles to quaternions
+		quats = R.from_euler("xyz", np.vstack((roll, pitch, yaw)).T).as_quat()
+
+		# Inject actual robot pose for testing
+		quats[0] = np.array([-9.001217674607042e-05, 9.343880844289536e-05, 0.10426205165325972, 0.9945498518184245])
+		self.particles[0] = np.array([7.739036989559301, 1.8213204770359357, 0.9957110470344852])
+
+		self.rotations = R.from_quat(quats)
+
+		
+
+		if visualize:
+			# Convert quats to a direction vector, by rotating [1, 0, 0]
+			dir_vecs = R.from_quat(quats).apply([1, 0, 0])
+
+			# Create pcd from the particles
+			pcd = o3d.geometry.PointCloud()
+			pcd.points = o3d.utility.Vector3dVector(self.particles)
+			pcd.normals = o3d.utility.Vector3dVector(dir_vecs)
+			pcd.paint_uniform_color([0, 0, 1])
+			o3d.visualization.draw_geometries([pcd, self.world.world], point_show_normal=True)
+		
+		# Add the quaternions to the particles
+		self.particles = np.hstack((self.particles, quats))
+
+		print("Particles shape: {}".format(self.particles.shape))
 
 
 
@@ -178,6 +208,112 @@ class Localizer(Node):
 		# Get the normals
 		normals = get_normals(xyz)
 
+		# Show normals as 2d image in opencv that updates as new data comes in
+		# Shape of normals: (1024, 128, 3)
+		# Convert to 2d image
+		cv2.imshow("Normals", abs(normals))
+		cv2.waitKey(1)
+
+		# Create similar image from virtual world and lidar
+		rays = self.lidar.rotate_rays(rotation)
+		rays += [translation[0], translation[1], translation[2], 0, 0, 0]
+
+		raycast = self.world.cast_rays(rays)
+
+		vdepth = raycast['t_hit'].numpy()
+		vnormals = raycast['primitive_normals'].numpy()
+
+		# Show normals as 2d image in opencv that updates as new data comes in
+		#cv2.imshow("Virtual normals", abs(vnormals))
+		#cv2.waitKey(1)
+
+		# Select rays for localization
+		ray_indices = self.select_rays(depth, xyz, 100, visualize=True)
+		rays = self.lidar.rays[ray_indices]
+
+		# FOR TESTING::::: ------------------------------------------------------
+		# rays = self.lidar.rays
+		# rays = rays.reshape(-1, 6)
+
+		print("Shape of rays: {}".format(rays.shape))
+
+		# Inject actual robot position into particle [0]
+		self.particles[0] = np.array([translation[0], translation[1], translation[2], rotation[0], rotation[1], rotation[2], rotation[3]])
+		self.rotations[0] = R.from_quat(rotation)
+
+		# Get the virtual rays
+		actual_depth = depth[ray_indices]
+		actual_normals = normals[ray_indices]
+		raycast_depth, raycast_normals = self.raycast_particles(rays)
+
+		# # FOR TESTING::::: ------------------------------------------------------
+		# actual_depth = depth.reshape(-1)
+		# actual_normals = normals.reshape(-1, 3)
+
+
+		# Rotate normals, such that they are in the reference frame of the robot
+		# Shape of raycast_normals: (n, rays, 3)
+		for i, r in enumerate(self.rotations):
+			raycast_normals[i] = r.apply(raycast_normals[i])
+
+		# Show normals as 2d image in opencv that updates as new data comes in
+		#raycast_image = np.zeros((self.particles.shape[0], 128, 1024, 3))
+		#for i in range(self.particles.shape[0]):
+		#	raycast_image[i] = abs(raycast_normals[i].reshape(128, 1024, 3))
+
+		#cv2.imshow("Virtual normals", abs(raycast_image[0]))
+		#cv2.waitKey(1)
+
+
+		print("Shape of raycast_normals: {}".format(raycast_normals.shape))
+		print("Shape of actual_normals: {}".format(actual_normals.shape))
+
+
+		# Calculate the error for all. raycast is [n, rays], actual is [rays]
+		error_depth = np.linalg.norm(raycast_depth - actual_depth, axis=1).ravel()
+
+		# Calculate the error for all. raycast is [n, rays, 3], actual is [rays, 3]
+		error_normal = np.linalg.norm(raycast_normals[:, :, 2][:, np.newaxis, :] - actual_normals[np.newaxis, :, 2], axis=2).ravel()
+
+		# Calculate MSE for depth
+		mse = np.zeros(raycast_depth.shape[0])
+		for i in range(raycast_depth.shape[0]):
+			mse[i] = np.mean(np.square(raycast_depth[i] - actual_depth))
+
+		#cosine_dist_normal = np.zeros(raycast_normals.shape[0])
+		# for i in range(raycast_normals.shape[0]):
+		# 	cosine_dist_normal[i] = np.mean(np.dot(actual_normals, raycast_normals[i].T))
+
+
+		print("Shape of normal error: {}".format(error_normal.shape))
+		print("Shape of depth error: {}".format(error_depth.shape))
+		# print("Shape of cosine_dist_normal: {}".format(cosine_dist_normal.shape))
+
+
+		# Print what order of indexes with the lowest error, ie [100, 69, 52] would mean that the 100th particle has the lowest error, 69th the second lowest and so on
+		print("Normal error: {}".format(error_normal))
+		print("Depth error: {}".format(error_depth))
+		print("MSE: {}".format(mse))
+		best_indicies_depth = np.argsort(error_depth)
+		best_indicies_normal = np.argsort(error_normal)
+		best_indicies_mse = np.argsort(mse)
+		# best_indicies_cosine = np.argsort(cosine_dist_normal)
+		print("Best indicies d: {}".format(best_indicies_depth))
+		print("Values d: {}".format(error_depth[best_indicies_depth]))
+		print("Best indicies n: {}".format(best_indicies_normal))
+		print("Values n: {}".format(error_normal[best_indicies_normal]))
+		print("Best indicies mse: {}".format(best_indicies_mse))
+		print("Values mse: {}".format(mse[best_indicies_mse]))
+		# print("Best indicies c: {}".format(best_indicies_cosine))
+		
+	
+
+
+
+	def select_rays(self, depth, xyz, amount, visualize=False):
+		# Get the normals
+		normals = get_normals(xyz)
+
 		# Calculate gradient of depth
 		depth_gradient = np.gradient(depth, axis=(0, 1))
 		depth_gradient = np.abs(depth_gradient[0]) + np.abs(depth_gradient[1])
@@ -204,9 +340,6 @@ class Localizer(Node):
 		probabilities2[nonzero_indices[0], nonzero_indices[1]] = probabilities
 		# Scale the probabilities to 0-1
 		dist_probabilities = (probabilities2 / np.max(probabilities2))
-
-		# cv2.imshow("Probabilities", dist_probabilities)
-		# Cap gradient between -1 and 1
 		
 		# Invert depth gradient, such that lower values are more likely to be selected
 		depth_gradient = 1.0 / depth_gradient
@@ -224,49 +357,30 @@ class Localizer(Node):
 
 
 		#Scale depth gradient to 0-1
-		depth_gradient = (depth_gradient / np.max(depth_gradient))
-		cv2.imshow("Probabilities", depth_gradient)
+		depth_gradient = (depth_gradient / np.max(depth_gradient))[:,:,0] # Otherwise is [m,n,1]
 
+		print("Depth gradient shape: {}".format(depth_gradient.shape))
+		print("Dist probabilities shape: {}".format(dist_probabilities.shape))
 
+		# Average the two probabilities
+		probabilities = depth_gradient*0.8 + dist_probabilities*0.2
+		#probabilities = depth_gradient * dist_probabilities
 
-		random_nonzero_indices = np.random.choice(len(nonzero_indices[0]), size=100, replace=False, p=probabilities)
-		selected_indices = (nonzero_indices[0][random_nonzero_indices], nonzero_indices[1][random_nonzero_indices])
+		probabilities[rows, cols] = 0
+
+		probabilities_image = np.zeros((128, 1024, 3))
+		probabilities_image[:,:,0] = probabilities
+
+		random_indices = np.random.choice(probabilities.shape[0] * probabilities.shape[1], size=amount, replace=False, p=(probabilities / np.sum(probabilities)).ravel())
 		
-		normals[selected_indices[0], selected_indices[1], : ] = 1
+		selected_indices = np.unravel_index(random_indices, (128, 1024))
 
-		# Show normals as 2d image in opencv that updates as new data comes in
-		# Shape of normals: (1024, 128, 3)
-		# Convert to 2d image
-		cv2.imshow("Normals", abs(normals))
+		probabilities_image[selected_indices[0], selected_indices[1]] = [0, 1, 0]
 
-		# Create similar image from virtual world and lidar
-		rays = self.lidar.rotate_rays(rotation)
-		rays += [translation[0], translation[1], translation[2], 0, 0, 0]
+		if visualize:
+			cv2.imshow("Probabilities", probabilities_image)
 
-		raycast = self.world.cast_rays(rays)
-
-		vdepth = raycast['t_hit'].numpy()
-		vnormals = raycast['primitive_normals'].numpy()
-
-		vnormals[rows, cols, :] *= 0.2
-
-		# Show normals as 2d image in opencv that updates as new data comes in
-		cv2.imshow("Virtual normals", abs(vnormals))
-		cv2.waitKey(1)
-
-				
-		# Shape of xyz: (131072, 3)
-		# Flatten array to [-1, 3]
-		xyz = xyz.reshape(-1, 3)
-		depth = depth.reshape(-1)
-		normals = normals.reshape(-1, 3)
-
-
-		# Remove points that are too far away or are zero
-		mask = np.logical_and(self.min_range < depth, depth < self.max_range)
-		xyz = xyz[mask]
-		normals = normals[mask]
-		depth = depth[mask]
+		return selected_indices
 
 
 def main(args=None):
