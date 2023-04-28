@@ -38,6 +38,8 @@ import cv2
 cv2.namedWindow("Normals", cv2.WINDOW_NORMAL)
 cv2.namedWindow("Virtual normals", cv2.WINDOW_NORMAL)
 cv2.namedWindow("Probabilities", cv2.WINDOW_NORMAL)
+cv2.namedWindow("Lidar", cv2.WINDOW_NORMAL)
+cv2.namedWindow("Dummy Lidar", cv2.WINDOW_NORMAL)
 
 class Localizer(Node):
 	def __init__(self):
@@ -81,6 +83,7 @@ class Localizer(Node):
 		
 		# Create lidar object
 		self.lidar = Lidar.Virtual_Lidar(offset=3*(np.pi/2))
+		self.dummy_lidar = Lidar.Virtual_Lidar(offset=3*(np.pi/2))
 		self.get_logger().info("Created lidar object")
 
 		# Create particles
@@ -166,7 +169,7 @@ class Localizer(Node):
 		# Attempt to get transform at time of message, otherwise get most recent
 		try:
 			# Get the true transform at the time of the message
-			t = self.tf_buffer.lookup_transform(self.odom_topic, msg.header.frame_id, msg.header.stamp)
+			t = self.tf_buffer.lookup_transform(self.world_frame, msg.header.frame_id, msg.header.stamp)
 		except TransformException as e:
 			# self.get_logger().warn("Transform error: {}, when transforming from {} to {}\n Trying most recent".format(e, msg.header.frame_id, self.world_frame))
 			t = None
@@ -174,7 +177,7 @@ class Localizer(Node):
 		if t is None:
 			try:
 				# Get the most recent transform
-				t = self.tf_buffer.lookup_transform(self.odom_topic, msg.header.frame_id, rclpy.time.Time())
+				t = self.tf_buffer.lookup_transform(self.world_frame, msg.header.frame_id, rclpy.time.Time())
 			except TransformException as e:
 				self.get_logger().error("Transform error: {}, when transforming from {} to {}".format(e, msg.header.frame_id, self.world_frame))
 				return
@@ -211,8 +214,18 @@ class Localizer(Node):
 		# Show normals as 2d image in opencv that updates as new data comes in
 		# Shape of normals: (1024, 128, 3)
 		# Convert to 2d image
-		cv2.imshow("Normals", abs(normals))
+		#cv2.imshow("Normals", abs(normals))
+		#cv2.waitKey(1)
+
+		# Set self.lidar.rays as rays from the lidar
+		# Assert that all rays are not nan or inf
+		assert np.all(np.isfinite(xyz)), "xyz contains non-finite values"
+
+		self.lidar.set_rays(np.divide(xyz, np.linalg.norm(xyz, axis=2, keepdims=True)))
+		cv2.imshow("Lidar", self.lidar.rays[:,:,3:])
+		cv2.imshow("Dummy Lidar", self.dummy_lidar.rays[:,:,3:])
 		cv2.waitKey(1)
+
 
 		# Create similar image from virtual world and lidar
 		rays = self.lidar.rotate_rays(rotation)
@@ -224,12 +237,23 @@ class Localizer(Node):
 		vnormals = raycast['primitive_normals'].numpy()
 
 		# Show normals as 2d image in opencv that updates as new data comes in
-		#cv2.imshow("Virtual normals", abs(vnormals))
-		#cv2.waitKey(1)
+		cv2.imshow("Virtual normals", abs(vnormals))
+		cv2.waitKey(1)
 
 		# Select rays for localization
 		ray_indices = self.select_rays(depth, xyz, 100, visualize=True)
-		rays = self.lidar.rays[ray_indices]
+		
+		# 
+		rays = self.lidar.rays[ray_indices] # Assumes same lidar model. More correct solution is to take xyz from the incoming image and normalize it
+		print(rays[0])
+		#rays = xyz[ray_indices]
+		#rays = rays.reshape(-1, 3)
+		# Normalize for length 1
+		#rays = rays / np.linalg.norm(rays, axis=1)[:, None]
+
+		# Needs origo = [0,0,0] prepended to each ray
+		#rays = np.hstack((np.zeros((rays.shape[0], 3)), rays))
+
 
 		# FOR TESTING::::: ------------------------------------------------------
 		# rays = self.lidar.rays
@@ -267,6 +291,15 @@ class Localizer(Node):
 
 		print("Shape of raycast_normals: {}".format(raycast_normals.shape))
 		print("Shape of actual_normals: {}".format(actual_normals.shape))
+
+		print("Mean of raycast_depth: {}".format(np.mean(raycast_depth[0])))
+		print("Mean of actual_depth: {}".format(np.mean(actual_depth)))
+
+		print("Shape of raycast_depth: {}".format(raycast_depth.shape))
+		print("Shape of actual_depth: {}".format(actual_depth.shape))
+
+		hard_depth = np.linalg.norm(raycast_depth[0] - actual_depth)
+		print("Hard depth: {}".format(hard_depth))
 
 
 		# Calculate the error for all. raycast is [n, rays], actual is [rays]

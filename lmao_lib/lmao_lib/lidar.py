@@ -95,6 +95,15 @@ class Virtual_Lidar:
 			rays = self.rays
 		directions = rays[:, :, 3:]
 		return np.allclose(np.linalg.norm(directions, axis=2), 1)
+	
+	def set_rays(self, rays):
+		if rays.shape[-1] == 3:
+			self.rays[:, :, 3:] = rays
+		elif rays.shape[-1] == 6:
+			self.rays = rays
+		else:
+			print("Invalid shape for rays")
+			exit()
 
 	def plot_rays(self, rays=None,fig=None, ax=None, visualize=True, plot_unit_sphere=True):
 		if fig is None:
