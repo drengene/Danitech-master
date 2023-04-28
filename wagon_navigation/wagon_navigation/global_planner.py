@@ -27,8 +27,8 @@ class global_planner():
         else:
             self.determine_valid_vertices(0.8, 2, "/home/daniel/Documents/master/")
         
-        #self.start_stop_chooser(self.mesh_map)
-        self.points = np.array([50970, 558829])
+        self.start_stop_chooser(self.mesh_map)
+        #self.points = np.array([50970, 558829])
 
         path = self.a_star(self.adj_list, self.points[0], self.points[1]) # start at 7000
         if path is None:
@@ -332,7 +332,7 @@ class ros_planner(Node):
 
     def path_publisher(self, plan):
         path = PoseArray()
-        path.header.frame_id = "map"
+        path.header.frame_id = "world"
         path.header.stamp = self.get_clock().now().to_msg()
         # path.header.stamp.sec = self.secs
         # path.header.stamp.nanosec = self.nanosecs

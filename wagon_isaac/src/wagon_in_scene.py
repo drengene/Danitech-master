@@ -112,7 +112,9 @@ class IsaacSim(Node):
 
         self.set_physics()
 
-        self.import_usd() # Import the world USD 
+        #self.import_usd() # Import the world USD 
+        self.world.scene.add_default_ground_plane()
+
         self.world.reset()
         self.import_from_urdf()
 
@@ -195,8 +197,8 @@ class IsaacSim(Node):
     def import_usd(self):
         #path = "/home/danitech/isaac_ws/environments/USD/grass_terrain.usd"
         #path = "/home/danitech/isaac_ws/environments/USD/Quarray_en_cantera.usd"
-        #path = "/home/danitech/isaac_ws/environments/USD/fun_in_a_bun.usd"
-        path = "/home/danitech/isaac_ws/environments/USD/simple_ramp.usd"
+        path = "/home/danitech/isaac_ws/environments/USD/fun_in_a_bun.usd"
+        #path = "/home/danitech/isaac_ws/environments/USD/simple_ramp.usd"
 
         #path = "/home/danitech/master_ws/src/Danitech-master/wagon_isaac/usd/environments/warehouse.usd"    
         
@@ -336,7 +338,7 @@ class IsaacSim(Node):
             wheel_f = prim.GetAttribute("drive:angular:physics:maxForce")
             wheel_armature = prim.GetAttribute("physxJoint:armature")
             wheel_s.Set(0.00)
-            wheel_d.Set(150.00)
+            wheel_d.Set(1500.00)
             wheel_f.Set(5000.00)
             wheel_armature.Set(4000.00)
 

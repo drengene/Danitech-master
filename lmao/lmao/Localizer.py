@@ -49,7 +49,8 @@ class Localizer(Node):
 
 		# Declare parameters
 		from rcl_interfaces.msg import ParameterDescriptor
-		self.declare_parameter('map_path', '/home/junge/Documents/mesh_map/map.ply', ParameterDescriptor(description="Path to the map file"))
+		#self.declare_parameter('map_path', '/home/junge/Documents/mesh_map/map.ply', ParameterDescriptor(description="Path to the map file"))
+		self.declare_parameter('map_path', '/home/danitech/master_ws/src/Danitech-master/wagon_navigation/wagon_navigation/pose_data/isaac_map.ply', ParameterDescriptor(description="Path to the map file"))
 		self.declare_parameter('lidar_topic', "/wagon/base_scan/lidar_data", ParameterDescriptor(description="Topic to subscribe to for lidar data"))
 		self.declare_parameter('max_range', 90000, ParameterDescriptor(description="Maximum range of the lidar in mm"))
 		self.declare_parameter('min_range', 2300, ParameterDescriptor(description="Minimum range of the lidar in mm"))
@@ -87,7 +88,7 @@ class Localizer(Node):
 		self.get_logger().info("Created lidar object")
 
 		# Create particles
-		self.init_particles(100, visualize=True)
+		self.init_particles(10, visualize=True)
 
 
 	def get_particle_lidar_rays(self, rays):
@@ -214,14 +215,18 @@ class Localizer(Node):
 		# Show normals as 2d image in opencv that updates as new data comes in
 		# Shape of normals: (1024, 128, 3)
 		# Convert to 2d image
-		#cv2.imshow("Normals", abs(normals))
-		#cv2.waitKey(1)
+		cv2.imshow("Normals", abs(normals))
+		cv2.waitKey(1)
 
 		# Set self.lidar.rays as rays from the lidar
 		# Assert that all rays are not nan or inf
 		assert np.all(np.isfinite(xyz)), "xyz contains non-finite values"
 
 		self.lidar.set_rays(np.divide(xyz, np.linalg.norm(xyz, axis=2, keepdims=True)))
+
+		#print("First lidar ray: {}".format(self.lidar.rays[0, 0, :]))
+		#print("First dummy lidar ray: {}".format(self.dummy_lidar.rays[0, 0, :]))
+		
 		cv2.imshow("Lidar", self.lidar.rays[:,:,3:])
 		cv2.imshow("Dummy Lidar", self.dummy_lidar.rays[:,:,3:])
 		cv2.waitKey(1)
@@ -303,7 +308,16 @@ class Localizer(Node):
 
 
 		# Calculate the error for all. raycast is [n, rays], actual is [rays]
-		error_depth = np.linalg.norm(raycast_depth - actual_depth, axis=1).ravel()
+		error_depth = raycast_depth - actual_depth
+
+		print("Shape of error_depth: {}".format(error_depth.shape))
+
+		# Calculate mean and variance of error
+		mean_depth = np.mean(error_depth[1])
+		var_depth = np.std(error_depth[1])
+		print("Mean depth error: {}".format(mean_depth))
+		print("StdDev depth error: {}".format(var_depth))
+		print("Min depth error_ {}, max depth error: {}".format(np.min(error_depth[1]), np.max(error_depth[1])))
 
 		# Calculate the error for all. raycast is [n, rays, 3], actual is [rays, 3]
 		error_normal = np.linalg.norm(raycast_normals[:, :, 2][:, np.newaxis, :] - actual_normals[np.newaxis, :, 2], axis=2).ravel()
@@ -324,9 +338,6 @@ class Localizer(Node):
 
 
 		# Print what order of indexes with the lowest error, ie [100, 69, 52] would mean that the 100th particle has the lowest error, 69th the second lowest and so on
-		print("Normal error: {}".format(error_normal))
-		print("Depth error: {}".format(error_depth))
-		print("MSE: {}".format(mse))
 		best_indicies_depth = np.argsort(error_depth)
 		best_indicies_normal = np.argsort(error_normal)
 		best_indicies_mse = np.argsort(mse)
@@ -338,6 +349,10 @@ class Localizer(Node):
 		print("Best indicies mse: {}".format(best_indicies_mse))
 		print("Values mse: {}".format(mse[best_indicies_mse]))
 		# print("Best indicies c: {}".format(best_indicies_cosine))
+
+
+
+		exit()
 		
 	
 
