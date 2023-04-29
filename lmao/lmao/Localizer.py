@@ -13,7 +13,7 @@ import scipy.ndimage as ndimage
 from multiprocessing import Process, Queue
 
 import threading
-
+ 
 import time
 
 # Ros
@@ -49,8 +49,8 @@ class Localizer(Node):
 
 		# Declare parameters
 		from rcl_interfaces.msg import ParameterDescriptor
-		#self.declare_parameter('map_path', '/home/junge/Documents/mesh_map/map.ply', ParameterDescriptor(description="Path to the map file"))
-		self.declare_parameter('map_path', '/home/danitech/master_ws/src/Danitech-master/wagon_navigation/wagon_navigation/pose_data/isaac_map.ply', ParameterDescriptor(description="Path to the map file"))
+		self.declare_parameter('map_path', '/home/junge/Documents/mesh_map/map.ply', ParameterDescriptor(description="Path to the map file"))
+		#self.declare_parameter('map_path', '/home/danitech/master_ws/src/Danitech-master/wagon_navigation/wagon_navigation/pose_data/isaac_map.ply', ParameterDescriptor(description="Path to the map file"))
 		self.declare_parameter('lidar_topic', "/wagon/base_scan/lidar_data", ParameterDescriptor(description="Topic to subscribe to for lidar data"))
 		self.declare_parameter('max_range', 90000, ParameterDescriptor(description="Maximum range of the lidar in mm"))
 		self.declare_parameter('min_range', 2300, ParameterDescriptor(description="Minimum range of the lidar in mm"))
@@ -88,7 +88,7 @@ class Localizer(Node):
 		self.get_logger().info("Created lidar object")
 
 		# Create particles
-		self.init_particles(10, visualize=True)
+		self.init_particles(10, visualize=False)
 
 
 	def get_particle_lidar_rays(self, rays):
@@ -145,6 +145,8 @@ class Localizer(Node):
 		self.particles[0] = np.array([7.739036989559301, 1.8213204770359357, 0.9957110470344852])
 
 		self.rotations = R.from_quat(quats)
+
+		self.probabilities = np.ones(self.n_particles)/self.n_particles
 
 		
 
@@ -308,7 +310,9 @@ class Localizer(Node):
 
 
 		# Calculate the error for all. raycast is [n, rays], actual is [rays]
-		error_depth = raycast_depth - actual_depth
+		#error_depth = raycast_depth - actual_depth
+		# Should be shape n
+		error_depth = np.linalg.norm(raycast_depth - actual_depth, axis=1).ravel()
 
 		print("Shape of error_depth: {}".format(error_depth.shape))
 
@@ -349,6 +353,15 @@ class Localizer(Node):
 		print("Best indicies mse: {}".format(best_indicies_mse))
 		print("Values mse: {}".format(mse[best_indicies_mse]))
 		# print("Best indicies c: {}".format(best_indicies_cosine))
+
+		d_processed = np.power(error_depth, -1)
+		d_processed = d_processed / np.sum(d_processed)
+
+		print("d_processed: {}".format(d_processed[best_indicies_depth]))
+		self.probabilities = d_processed
+
+		# Resample the particles
+		#self.particles = self.particles[best_indicies_depth]
 
 
 
