@@ -82,58 +82,54 @@ class World:
 		# Show world and points
 		o3d.visualization.draw_geometries([self.world, pcd])
 
-
-	def get_probable_random_points(self, n, lidar_height=1):
-		# Create copy of world
-		world = self.world
-		print("World has normals: ", world.has_triangle_normals(), "\nWorld has vertex normals: ", world.has_vertex_normals())
+	
+	def prep_world_for_random(self):
+		print("World has normals: ", self.world.has_triangle_normals(), "\nWorld has vertex normals: ", self.world.has_vertex_normals())
 		# Check if world triangles has normals
-		if not world.has_triangle_normals():
+		if not self.world.has_triangle_normals():
 			print("Computing normals")
 			# Compute normals
-			world.compute_triangle_normals()
+			self.world.compute_triangle_normals()
 		else:
 			print("World has normals")
 		
 		# Remove all triangles with normal z < 0.8
 		print("Removing triangles with normal z < 0.8")
-		world.remove_triangles_by_mask(np.asarray(world.triangle_normals)[:, 2] < 0.75)
-		world.remove_unreferenced_vertices()
-		world = world.remove_degenerate_triangles()
+		self.world.remove_triangles_by_mask(np.asarray(self.world.triangle_normals)[:, 2] < 0.75)
+		self.world.remove_unreferenced_vertices()
+		self.world = self.world.remove_degenerate_triangles()
 
 		# Find all non manifold edges and show them in red
-		non_manifold_edges_indicis = world.get_non_manifold_edges(allow_boundary_edges = False)
-		non_manifold_vertices_indicis = world.get_non_manifold_vertices()
+		non_manifold_edges_indicis = self.world.get_non_manifold_edges(allow_boundary_edges = False)
+		non_manifold_vertices_indicis = self.world.get_non_manifold_vertices()
 		#print("Non manifold edges indicis: ", non_manifold_edges_indicis)
 		#print("Non manifold vertices indicis: ", non_manifold_vertices_indicis)
 		
 		# Show non manifold vertices
 		non_manifold_vertices = o3d.geometry.PointCloud()
-		non_manifold_vertices.points = o3d.utility.Vector3dVector(np.asarray(world.vertices)[non_manifold_vertices_indicis])
+		non_manifold_vertices.points = o3d.utility.Vector3dVector(np.asarray(self.world.vertices)[non_manifold_vertices_indicis])
 		non_manifold_vertices.paint_uniform_color([1, 0, 0])
 
 		# Show non manifold edges
 		non_manifold_edges = o3d.geometry.LineSet()
-		non_manifold_edges.points = o3d.utility.Vector3dVector(np.asarray(world.vertices))
+		non_manifold_edges.points = o3d.utility.Vector3dVector(np.asarray(self.world.vertices))
 		non_manifold_edges.lines = non_manifold_edges_indicis
 		non_manifold_edges.paint_uniform_color([0, 1, 0])
 
+
+
+	def get_probable_random_points(self, n, lidar_height=1, poisson = False):
 		# Sample points with poisson disk sampling
-		print("Sampling {} points with poisson disk sampling".format(n))
-		pcd = world.sample_points_poisson_disk(n)
+		if poisson:
+			print("Sampling {} points with poisson disk sampling".format(n))
+			pcd = self.world.sample_points_poisson_disk(n)
+		else:
+			pcd = self.world.sample_points_uniformly(n)
 		# Color points red
 		pcd.paint_uniform_color([1, 0, 0])
 		pcd.normalize_normals()
 		# Move all points by the normal assigned to them
 		pcd.points = o3d.utility.Vector3dVector(np.asarray(pcd.points) + np.asarray(pcd.normals) * lidar_height)
-
-		# Show world and points
-		#o3d.visualization.draw_geometries([world, pcd])
-
-	
-		# Show world
-		# o3d.visualization.draw_geometries([world, non_manifold_vertices, non_manifold_edges])
-
 		return np.asarray(pcd.points)
 
 			

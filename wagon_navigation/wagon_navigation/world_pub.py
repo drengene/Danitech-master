@@ -61,6 +61,13 @@ class FramePublisher(Node):
 		self.pose_subscription  # prevent unused variable warning
 		self.get_logger().info('Subscribed to /wagon/' + self.wagon_name + '_pose_gt')
 
+		self.odom_gt_pub = self.create_publisher(
+			Odometry,
+			'/wagon/' + self.wagon_name + '_odom_gt',
+			1)
+		self.odom_gt_pub  # prevent unused variable warning
+
+
 		# self.clock_sub = self.create_subscription(
 		# 	Clock,
 		# 	'/clock',
@@ -117,6 +124,33 @@ class FramePublisher(Node):
 		
 		# Send the transformation
 		self.tf_broadcaster.sendTransform(t)
+
+		# Publish the odom_gt
+		odom_gt = Odometry()
+		odom_gt.header.stamp.sec = msg.header.stamp.sec
+		odom_gt.header.stamp.nanosec = msg.header.stamp.nanosec
+		odom_gt.header.frame_id = 'world'
+		odom_gt.child_frame_id = 'odom_gt'
+		odom_gt.pose.pose.position.x = msg.pose.pose.position.x
+		odom_gt.pose.pose.position.y = msg.pose.pose.position.y
+		odom_gt.pose.pose.position.z = msg.pose.pose.position.z
+		odom_gt.pose.pose.orientation.x = msg.pose.pose.orientation.x
+		odom_gt.pose.pose.orientation.y = msg.pose.pose.orientation.y
+		odom_gt.pose.pose.orientation.z = msg.pose.pose.orientation.z
+		odom_gt.pose.pose.orientation.w = msg.pose.pose.orientation.w
+		
+		# Incomming data is in global frame. Should be in local frame
+		vel_xyz = np.array([msg.twist.twist.linear.x, msg.twist.twist.linear.y, msg.twist.twist.linear.z])
+		vel_rpy = np.array([msg.twist.twist.angular.x, msg.twist.twist.angular.y, msg.twist.twist.angular.z])
+		vel_xyz_local = inverse_rotation.as_matrix().dot(vel_xyz)
+		vel_rpy_local = inverse_rotation.as_matrix().dot(vel_rpy)
+		odom_gt.twist.twist.linear.x = vel_xyz_local[0]
+		odom_gt.twist.twist.linear.y = vel_xyz_local[1]
+		odom_gt.twist.twist.linear.z = vel_xyz_local[2]
+		odom_gt.twist.twist.angular.x = vel_rpy_local[0]
+		odom_gt.twist.twist.angular.y = vel_rpy_local[1]
+		odom_gt.twist.twist.angular.z = vel_rpy_local[2]
+		self.odom_gt_pub.publish(odom_gt)
 
 
 def main():
