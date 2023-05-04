@@ -10,7 +10,7 @@ import datetime
 import pickle
 
 A_VEL = 0.0
-F_VEL = 15.0
+F_VEL = 2.0
 
 
 class OdomTest(Node):
