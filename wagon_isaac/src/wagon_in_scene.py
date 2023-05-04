@@ -105,15 +105,15 @@ class IsaacSim(Node):
         self.timeline = omni.timeline.get_timeline_interface()
         self.pause_world()
 
-        #self.world.scene.add_default_ground_plane()
-        #self.world.reset()
+        self.world.scene.add_default_ground_plane()
+        self.world.reset()
 
         self.stage = omni.usd.get_context().get_stage()
 
         self.set_physics()
 
-        #self.import_usd() # Import the world USD 
-        self.world.scene.add_default_ground_plane()
+        self.import_usd() # Import the world USD 
+        #self.world.scene.add_default_ground_plane()
 
         self.world.reset()
         self.import_from_urdf()
@@ -197,8 +197,8 @@ class IsaacSim(Node):
     def import_usd(self):
         #path = "/home/danitech/isaac_ws/environments/USD/grass_terrain.usd"
         #path = "/home/danitech/isaac_ws/environments/USD/Quarray_en_cantera.usd"
-        path = "/home/danitech/isaac_ws/environments/USD/fun_in_a_bun.usd"
-        #path = "/home/danitech/isaac_ws/environments/USD/simple_ramp.usd"
+        #path = "/home/danitech/isaac_ws/environments/USD/fun_in_a_bun.usd"
+        path = "/home/danitech/isaac_ws/environments/USD/simple_ramp.usd"
 
         #path = "/home/danitech/master_ws/src/Danitech-master/wagon_isaac/usd/environments/warehouse.usd"    
         

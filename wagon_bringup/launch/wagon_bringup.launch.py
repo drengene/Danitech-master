@@ -20,6 +20,8 @@ def generate_launch_description():
 
     use_ekf = LaunchConfiguration('use_ekf', default= 'true')
 
+    add_world_offset = LaunchConfiguration('add_world_offset', default= 'false')
+
     urdf_file_name = 'wagon.urdf'
     urdf = os.path.join(
         get_package_share_directory('wagon_description'),
@@ -65,6 +67,7 @@ def generate_launch_description():
             executable='world_tf_pub',
             name='world_tf_pub',
             output='screen',
+            parameters=[{'add_offset': add_world_offset}],
             condition=IfCondition( LaunchConfiguration('pub_world'))
 
     )

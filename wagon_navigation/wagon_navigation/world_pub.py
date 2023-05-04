@@ -12,7 +12,7 @@ from rclpy.node import Node
 
 from tf2_ros import TransformBroadcaster
 
-base_link_z_offset = 0.29329
+base_link_z_offset = -0.5
 
 def quaternion_from_euler(ai, aj, ak):
 	ai /= 2.0
@@ -44,8 +44,8 @@ class FramePublisher(Node):
 		super().__init__('wagon_tf2_frame_publisher')
 
 		# Declare and acquire `turtlename` parameter
-		self.wagon_name = self.declare_parameter(
-		'base_link_name', 'base_link').get_parameter_value().string_value
+		self.wagon_name = self.declare_parameter('base_link_name', 'base_link').get_parameter_value().string_value
+		self.add_offset = self.declare_parameter('add_offset', False).get_parameter_value().bool_value
 
 		# Initialize the transform broadcaster
 		self.tf_broadcaster = TransformBroadcaster(self)
@@ -87,7 +87,10 @@ class FramePublisher(Node):
 		t.child_frame_id = 'world'
 
 		rotation = R.from_quat([msg.pose.pose.orientation.x, msg.pose.pose.orientation.y, msg.pose.pose.orientation.z, msg.pose.pose.orientation.w])
-		translation = np.array([msg.pose.pose.position.x, msg.pose.pose.position.y, msg.pose.pose.position.z + base_link_z_offset])
+		if self.add_offset:
+			translation = np.array([msg.pose.pose.position.x, msg.pose.pose.position.y, msg.pose.pose.position.z + base_link_z_offset])
+		else:
+			translation = np.array([msg.pose.pose.position.x, msg.pose.pose.position.y, msg.pose.pose.position.z])
 		
 		# Create the transformation matrix
 		transform = np.eye(4)

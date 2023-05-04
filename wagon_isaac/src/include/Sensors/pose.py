@@ -16,6 +16,7 @@ class pose_pub(Node):
         # self.transform_utils = core.get_transform_utils()  # Used to access Geometry
         self.sim_context =  core.SimulationContext()        # Used to interact with simulation
         self.pose_prim = self.stage.GetPrimAtPath(pose_prim_path)
+        #self.pose_prim.SetAttribute("physics:localSpaceVelocities", 1) # Virker ikke 
         self.world_prim = self.stage.GetPrimAtPath("/world")
         self.frame_id = frame_id
         self.odom_pub = self.create_publisher(Odometry, pose_prim_path + "_pose_gt", 10)
