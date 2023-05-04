@@ -32,6 +32,8 @@ class World:
 		self.scene = o3d.t.geometry.RaycastingScene()
 		self.scene.add_triangles(o3d.t.geometry.TriangleMesh.from_legacy(self.world))
 
+		self.prep_world_for_random()
+
 	def boolean_mesh(self, mesh, boolean_operation = "union", tolerance = 1e-6):
 		# Add a mesh to the world.
 		# The boolean_operation argument specifies the type of merge.
@@ -118,7 +120,7 @@ class World:
 
 
 
-	def get_probable_random_points(self, n, lidar_height=1, poisson = False):
+	def get_probable_random_points(self, n, lidar_height=1.29, poisson = False):
 		# Sample points with poisson disk sampling
 		if poisson:
 			print("Sampling {} points with poisson disk sampling".format(n))

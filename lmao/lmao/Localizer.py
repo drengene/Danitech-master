@@ -116,8 +116,9 @@ class Localizer(Node):
 		self.get_logger().info("Subscribed to topic: {}".format(self.odom_topic))
 		self.stamp = None
 
-		self.particle_learning_rate = 0.1
-		self.particle_full_resample_rate = 0.3
+		self.particle_learning_rate = 0.05
+		self.particle_full_resample_rate = 0.1
+		self.particles_to_keep = 0.2
 
 		self.counter = 0
 
@@ -183,32 +184,44 @@ class Localizer(Node):
 	def resample_particles(self):
 		# Normalize probabilities
 		# self.probabilities = self.probabilities / np.sum(self.probabilities)
+		# Keep self.particles_to_keep of the particles
+		sorted_index = np.argsort(self.probabilities)
+		self.n_particles_to_keep = int(self.particles_to_keep * self.n_particles)
+		
 		# Create new particles
 		new_particles = np.zeros_like(self.particles)
+		new_particles[:self.n_particles_to_keep] = self.particles[sorted_index[-self.n_particles_to_keep:]]
 		# Create new probabilities
 		new_probabilities = np.zeros_like(self.probabilities)
+		new_probabilities[:self.n_particles_to_keep] = self.probabilities[sorted_index[-self.n_particles_to_keep:]]
 
-		yaw = np.random.normal(0, np.pi/30, self.n_particles)
-		pitch = np.random.normal(0, np.pi/60, self.n_particles)
-		roll = np.random.normal(0, np.pi/60, self.n_particles)
+		new_rotations = self.rotations
+		new_rotations[:self.n_particles_to_keep] = self.rotations[sorted_index[-self.n_particles_to_keep:]]
 
-		xyz = np.random.normal(0, 0.5, (self.n_particles, 3))
+		yaw = np.random.normal(0, np.pi/40, self.n_particles - self.n_particles_to_keep)
+		pitch = np.random.normal(0, np.pi/60, self.n_particles - self.n_particles_to_keep)
+		roll = np.random.normal(0, np.pi/60, self.n_particles - self.n_particles_to_keep)
+
+		xyz = np.random.normal(0, .2, (self.n_particles - self.n_particles_to_keep, 3))
 		# Convert the particles to quaternions
 		perturbance = R.from_euler("xyz", np.vstack((roll, pitch, yaw)).T)
 
 		# Create a random index array
-		indices = np.random.choice(self.particles.shape[0], self.particles.shape[0], p=self.probabilities)
+		indices = np.random.choice(self.particles.shape[0], self.particles.shape[0] - self.n_particles_to_keep, p=self.probabilities)
 		# Create a new particle array
-		new_particles = self.particles[indices]
+		new_particles[self.n_particles_to_keep:] = self.particles[indices]
 		# Perturb the particles
-		new_particles[:, :3] = new_particles[:, :3] + xyz
+		new_particles[self.n_particles_to_keep:, :3] = new_particles[self.n_particles_to_keep:, :3] + xyz
 		# Create a new probability array
-		new_probabilities = self.probabilities[indices]
+		new_probabilities[self.n_particles_to_keep:] = self.probabilities[indices] * 0.9 # Discount the probability
 		new_probabilities = new_probabilities / np.sum(new_probabilities)
+
 		# New rotations
-		new_rotations = self.rotations[indices]
+		new_rotations[self.n_particles_to_keep:] = self.rotations[indices]
+		
 		# Perturb the rotations
-		new_rotations = new_rotations * perturbance
+		#new_rotations = new_rotations * perturbance
+		new_rotations[self.n_particles_to_keep:] = new_rotations[self.n_particles_to_keep:] * perturbance
 		# Set the new particles, probabilities and rotations
 		self.particles = new_particles
 		self.probabilities = new_probabilities
@@ -217,7 +230,23 @@ class Localizer(Node):
 
 		# Replace self.particle_full_resample_rate % of the particles with new ones
 		resample_n = int(self.particle_full_resample_rate * self.particles.shape[0])
-		self.world.get_probable_random_points(resample_n, poisson=False)
+		# Replace the lowest resample_n probable particles with new ones
+		sorted_index = np.argsort(self.probabilities)
+		print("Particle probabilities: {}".format(self.probabilities))
+		print("Particles being replaced: {}".format(sorted_index[:resample_n]))
+		self.particles[sorted_index[:resample_n], :3] = self.world.get_probable_random_points(resample_n, poisson=True)
+		# Set the probabilities of the new particles to 1/n
+		self.probabilities[sorted_index[:resample_n]] = 1.0 / self.particles.shape[0]
+
+		# Create random rotations for the new particles
+		yaw = np.random.uniform(0, 2*np.pi, resample_n)
+		pitch = np.random.normal(0, np.pi/20, resample_n)
+		roll = np.random.normal(0, np.pi/20, resample_n)
+		# Convert the particles to quaternions
+		self.rotations[sorted_index[:resample_n]] = R.from_euler("xyz", np.vstack((roll, pitch, yaw)).T)
+
+		# Normalize probabilities
+		self.probabilities = self.probabilities / np.sum(self.probabilities)
 
 
 	def get_particle_lidar_rays(self, rays):
@@ -270,8 +299,8 @@ class Localizer(Node):
 		quats = R.from_euler("xyz", np.vstack((roll, pitch, yaw)).T).as_quat()
 
 		# Inject actual robot pose for testing
-		quats[0] = np.array([-9.001217674607042e-05, 9.343880844289536e-05, 0.10426205165325972, 0.9945498518184245])
-		self.particles[0] = np.array([7.739036989559301, 1.8213204770359357, 0.9957110470344852])
+		quats[0] = np.array([0.0010384084288430288, 0.00030120795595691265, -0.00011077939289218057, 0.9999994093546397])
+		self.particles[0] = np.array([0.00046312785132803284, -0.002913896481242659, 1.2932854060325036])
 
 		self.rotations = R.from_quat(quats)
 
@@ -325,6 +354,9 @@ class Localizer(Node):
 		rotation = [t.transform.rotation.x, t.transform.rotation.y, t.transform.rotation.z, t.transform.rotation.w]
 		translation = [t.transform.translation.x, t.transform.translation.y, t.transform.translation.z]
 		
+		print("Actual translation: {}".format(translation))
+		print("Actual rotation: {}".format(rotation))
+
 		# # Construct the transformation matrix
 		# r = R.from_quat(rotation)
 		# T = np.eye(4)
@@ -503,7 +535,7 @@ class Localizer(Node):
 		# print("cos_processed: {}".format(cos_processed[best_indicies_cosine]))
 
 		#self.probabilities = self.probabilities + ((d_processed + cos_processed) / 2 )
-		self.probabilities = self.probabilities * (1-self.particle_learning_rate) + ((d_processed + cos_processed) / 2 ) * self.particle_learning_rate
+		self.probabilities = self.probabilities * (1-self.particle_learning_rate) + ((d_processed*3 + cos_processed)/4) * self.particle_learning_rate
 
 		self.best_index = np.argmax(self.probabilities)
 
@@ -572,7 +604,7 @@ class Localizer(Node):
 		# print("Dist probabilities shape: {}".format(dist_probabilities.shape))
 
 		# Average the two probabilities
-		probabilities = depth_gradient*0.8 + dist_probabilities*0.2
+		probabilities = depth_gradient*0.5 + dist_probabilities*0.5
 		#probabilities = depth_gradient * dist_probabilities
 
 		probabilities[rows, cols] = 0
