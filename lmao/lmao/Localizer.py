@@ -101,10 +101,16 @@ class Localizer(Node):
 		#self.viz.update_renderer()
 
 		self.particle_pcd = o3d.geometry.PointCloud()
+		self.average_pcd = o3d.geometry.PointCloud()
+		# self.mesh_average_arrow = o3d.geometry.TriangleMesh()
+		# self.mesh_average_arrow = self.mesh_average_arrow.create_arrow(1.0, 1.5, 5.0, 4.0, 20, 4, 1)
+
+
 		self.particle_pcd.points = o3d.utility.Vector3dVector(self.particles[:, :3])
 		dir_vecs = self.rotations.apply(np.array([[1, 0, 0]]))
 		self.particle_pcd.normals = o3d.utility.Vector3dVector(dir_vecs)
 		self.viz.add_geometry(self.particle_pcd)
+		self.viz.add_geometry(self.average_pcd)
 		self.render_option = self.viz.get_render_option()
 		self.render_option.point_show_normal = True
 
@@ -117,7 +123,7 @@ class Localizer(Node):
 		self.stamp = None
 
 		self.particle_learning_rate = 0.05
-		self.particle_full_resample_rate = 0.1
+		self.particle_full_resample_rate = 0.0
 		self.particles_to_keep = 0.2
 
 		self.counter = 0
@@ -131,9 +137,19 @@ class Localizer(Node):
 		colors[:, 0] = 1 - (self.probabilities / np.max(self.probabilities))
 		self.particle_pcd.colors = o3d.utility.Vector3dVector(colors)
 
-		self.viz.update_geometry(self.particle_pcd)
+		avg_pos, avg_rot = self.get_centroid()
+		self.average_pcd.points = o3d.utility.Vector3dVector(np.array([avg_pos]))
+		self.average_pcd.normals = o3d.utility.Vector3dVector(avg_rot.apply(np.array([[1, 0, 0]])))
+		# Move avergae arrow to position of average_pcd.points
+		# self.mesh_average_arrow.translate(avg_pos - self.mesh_average_arrow.get_center())
+		#self.mesh_average_arrow.rotate(avg_rot.as_matrix, center=avg_pos)
+
+		# self.viz.update_geometry(self.particle_pcd)
+		self.viz.update_geometry(self.average_pcd)
 		self.viz.poll_events()
 		self.viz.update_renderer()
+
+		# self.mesh_average_arrow.rotate(avg_rot.inv().as_matrix, center=avg_pos)
 
 
 	def odom_callback(self, msg):
@@ -207,7 +223,10 @@ class Localizer(Node):
 		perturbance = R.from_euler("xyz", np.vstack((roll, pitch, yaw)).T)
 
 		# Create a random index array
-		indices = np.random.choice(self.particles.shape[0], self.particles.shape[0] - self.n_particles_to_keep, p=self.probabilities)
+		try:
+			indices = np.random.choice(self.particles.shape[0], self.particles.shape[0] - self.n_particles_to_keep, p=self.probabilities)
+		except:
+			print(self.probabilities)
 		# Create a new particle array
 		new_particles[self.n_particles_to_keep:] = self.particles[indices]
 		# Perturb the particles
@@ -227,23 +246,23 @@ class Localizer(Node):
 		self.probabilities = new_probabilities
 		self.rotations = new_rotations
 
+		if self.particle_full_resample_rate > 0:
+			# Replace self.particle_full_resample_rate % of the particles with new ones
+			resample_n = int(self.particle_full_resample_rate * self.particles.shape[0])
+			# Replace the lowest resample_n probable particles with new ones
+			sorted_index = np.argsort(self.probabilities)
+			print("Particle probabilities: {}".format(self.probabilities))
+			print("Particles being replaced: {}".format(sorted_index[:resample_n]))
+			self.particles[sorted_index[:resample_n], :3] = self.world.get_probable_random_points(resample_n, poisson=True)
+			# Set the probabilities of the new particles to 1/n
+			self.probabilities[sorted_index[:resample_n]] = 1.0 / self.particles.shape[0]
 
-		# Replace self.particle_full_resample_rate % of the particles with new ones
-		resample_n = int(self.particle_full_resample_rate * self.particles.shape[0])
-		# Replace the lowest resample_n probable particles with new ones
-		sorted_index = np.argsort(self.probabilities)
-		print("Particle probabilities: {}".format(self.probabilities))
-		print("Particles being replaced: {}".format(sorted_index[:resample_n]))
-		self.particles[sorted_index[:resample_n], :3] = self.world.get_probable_random_points(resample_n, poisson=True)
-		# Set the probabilities of the new particles to 1/n
-		self.probabilities[sorted_index[:resample_n]] = 1.0 / self.particles.shape[0]
-
-		# Create random rotations for the new particles
-		yaw = np.random.uniform(0, 2*np.pi, resample_n)
-		pitch = np.random.normal(0, np.pi/20, resample_n)
-		roll = np.random.normal(0, np.pi/20, resample_n)
-		# Convert the particles to quaternions
-		self.rotations[sorted_index[:resample_n]] = R.from_euler("xyz", np.vstack((roll, pitch, yaw)).T)
+			# Create random rotations for the new particles
+			yaw = np.random.uniform(0, 2*np.pi, resample_n)
+			pitch = np.random.normal(0, np.pi/20, resample_n)
+			roll = np.random.normal(0, np.pi/20, resample_n)
+			# Convert the particles to quaternions
+			self.rotations[sorted_index[:resample_n]] = R.from_euler("xyz", np.vstack((roll, pitch, yaw)).T)
 
 		# Normalize probabilities
 		self.probabilities = self.probabilities / np.sum(self.probabilities)
@@ -284,6 +303,17 @@ class Localizer(Node):
 		raycast_normals = raycast_normals.reshape(self.n_particles, -1, 3) # Was (n_particles, 128, 1024, 3)
 		raycast_depth = raycast_depth.reshape(self.n_particles, -1, 1) # Was (n_particles, 128, 1024, 1)
 		return raycast_depth*1000, raycast_normals
+
+
+	def get_centroid(self):
+		# Get the centroid of the particles
+		pos_avg = np.average(self.particles[:,:3], axis=0, weights=self.probabilities)
+		# Get the average rotation
+		rot_avg = self.rotations.mean(weights=self.probabilities)
+
+		return pos_avg, rot_avg
+
+
 
 
 	def init_particles(self, n, visualize=False):
@@ -535,7 +565,9 @@ class Localizer(Node):
 		# print("cos_processed: {}".format(cos_processed[best_indicies_cosine]))
 
 		#self.probabilities = self.probabilities + ((d_processed + cos_processed) / 2 )
-		self.probabilities = self.probabilities * (1-self.particle_learning_rate) + ((d_processed*3 + cos_processed)/4) * self.particle_learning_rate
+		# If probability is nan dont
+		if not(np.isnan(d_processed).any() or np.isnan(cos_processed).any()):
+			self.probabilities = self.probabilities * (1-self.particle_learning_rate) + ((d_processed*3 + cos_processed)/4) * self.particle_learning_rate
 
 		self.best_index = np.argmax(self.probabilities)
 

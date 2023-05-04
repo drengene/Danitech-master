@@ -103,6 +103,8 @@ class MapConstructor(Node):
 		self.world_frame = self.get_parameter("world_frame").value
 		self.odom_topic = self.get_parameter("odom_topic").value
 
+		self.map_path = "/home/danitech/Documents/square_map.ply"
+
 		self.map_building = False
 
 		self.last_transform = np.zeros(7) # x, y, z, qx, qy, qz, qw
@@ -263,7 +265,7 @@ class MapConstructor(Node):
 		# Join process
 		p.join()
 		# Save mesh to Documents
-		o3d.io.write_triangle_mesh("/home/junge/Documents/mesh_map/map.ply", mesh)
+		o3d.io.write_triangle_mesh(self.map_path, mesh)
 
 		self.map_building = False
 

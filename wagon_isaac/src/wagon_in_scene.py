@@ -105,15 +105,15 @@ class IsaacSim(Node):
         self.timeline = omni.timeline.get_timeline_interface()
         self.pause_world()
 
-        self.world.scene.add_default_ground_plane()
-        self.world.reset()
+        #self.world.scene.add_default_ground_plane()
+        #self.world.reset()
 
         self.stage = omni.usd.get_context().get_stage()
 
         self.set_physics()
 
         self.import_usd() # Import the world USD 
-        #self.world.scene.add_default_ground_plane()
+        self.world.scene.add_default_ground_plane()
 
         self.world.reset()
         self.import_from_urdf()
@@ -199,6 +199,7 @@ class IsaacSim(Node):
         #path = "/home/danitech/isaac_ws/environments/USD/Quarray_en_cantera.usd"
         #path = "/home/danitech/isaac_ws/environments/USD/fun_in_a_bun.usd"
         path = "/home/danitech/isaac_ws/environments/USD/simple_ramp.usd"
+        #path = "/home/danitech/isaac_ws/environments/USD/cube_box_world.usd"
 
         #path = "/home/danitech/master_ws/src/Danitech-master/wagon_isaac/usd/environments/warehouse.usd"    
         
@@ -207,7 +208,7 @@ class IsaacSim(Node):
         prim = XFormPrim(
             prim_path=prim_path, name="grass",
             #position=np.array([0, 23, -87]), # Position for wagon in center of quarry scene
-            position=np.array([0, 0.0, -0.5]),
+            position=np.array([0, 0.0, 0.0]),
             #orientation=np.array([-0.7071068, 0, 0, 0.7071068])
         )
         self.world.scene.add(prim)
