@@ -8,13 +8,18 @@ import rclpy
 from rclpy.node import Node
 from rosgraph_msgs.msg import Clock
 from geometry_msgs.msg import Twist, Pose, PoseArray
+from nav_msgs.msg import Odometry
 
 
 class global_planner():
     def __init__(self, file_path, load_valid_points_from_path=False):
+        #super().__init__('global_planner')
+        # rclpy.init()
+
         self.load_ply_file(file_path)
         self.convert_to_tensor()
-        
+        #pose_subscriber = self.create_subscription(Odometry, "/wagon/base_link_pose_gt", self.pose_callback, 10)
+
         #self.adjacency_list(self.mesh_map)
 
         normal_mesh = self.get_normals(self.mesh_map)
@@ -25,9 +30,10 @@ class global_planner():
         if load_valid_points_from_path:
             self.load_valid_verticies(load_valid_points_from_path)
         else:
-            self.determine_valid_vertices(0.8, 2, "/home/daniel/Documents/master/")
+            self.determine_valid_vertices(0.9, 2, "/home/daniel/Documents/master/quarray")
         
         self.start_stop_chooser(self.mesh_map)
+        #self.destroy_subscription(pose_subscriber)
         #self.points = np.array([50970, 558829])
 
         path = self.a_star(self.adj_list, self.points[0], self.points[1]) # start at 7000
@@ -37,7 +43,7 @@ class global_planner():
         
         self.global_waypoints = self.convert_path(path)
         
-        #self.color_path(normal_mesh, path)
+        self.color_path(normal_mesh, path)
 
     def get_global_waypoints(self):
         return self.global_waypoints
@@ -86,7 +92,10 @@ class global_planner():
 
     # def path_to_lineset(self, path):
     def load_valid_verticies(self, file_path="/home/daniel/Documents/master/valid_points.npy"):
+        # check if path exists and then load it
         self.valid_points = np.load(file_path)
+        print("valid points loaded from file: ", np.count_nonzero(self.valid_points))
+
 
     def determine_valid_vertices(self, normal_z_threshold, invalidation_radius=1, path="/home/daniel/Documents/master/"):
         self.valid_points = np.ones(self.verticies.shape[0])
@@ -94,13 +103,15 @@ class global_planner():
 
         self.valid_points[self.vertex_normals[:, 2] < normal_z_threshold] = 0
         print("valid points: ", np.count_nonzero(self.valid_points))
+        if np.count_nonzero(self.valid_points) == 0:
+            exit("No valid points found, try lowering the normal_z_threshold or choose correct ply file")
         invalid_points = np.where(self.valid_points == 0)[0] # create list of "hard" invalid point indexes
 
-        sys.setrecursionlimit(2000)
+        sys.setrecursionlimit(4000)
 
         # Can possibly be optimized by only looking at invalid points that have valid points as neighbors
         for point_idx in invalid_points:
-            print("invalid point: ", point_idx)
+            # print("invalid point: ", point_idx)
             self.recursive_i = 0
             self.invalidate_in_radius(self.adj_list, invalidation_radius, point_idx, point_idx) # point_idx is given twice, since we have to compare the distance from the oringal invalid point
             #print("recursive calls: ", self.recursive_i)
@@ -193,10 +204,40 @@ class global_planner():
 
     def start_stop_chooser(self, mesh):
         print("Select start and stop points by holding shift, then clicking on the desired points")
+
+        normals = np.asanyarray(mesh.triangle_normals)
+        normals[normals[:, 2] < 0.9] = 0
+     
+        mesh.triangle_normals = o3d.utility.Vector3dVector(normals)
+
+        # Color all the points in the mesh that are not in self.valid_points
+        colors = np.asarray(mesh.vertex_colors)
+        
+
+        index = np.where(self.valid_points == 1)[0]
+
+        print("index 0", self.vertex_normals[0,2])
+        normal_z_color = np.floor(self.vertex_normals[index, 2] * 100).flatten()
+        print(normal_z_color.shape, "vertex_normal 0")
+
+        colors[index] = [0, 0, normal_z_color]
+        # colors[self.valid_points == 1] = [0, 0, self.vertex_normals[x][2]]
+
+        colors[self.valid_points == 0] = [1, 0, 0]
+        mesh.vertex_colors = o3d.utility.Vector3dVector(colors)
+
+
         self.points = np.array([], dtype=int)
         self.vis = o3d.visualization.VisualizerWithVertexSelection()
         self.vis.create_window()
         self.vis.add_geometry(mesh)
+
+        pcd = o3d.geometry.PointCloud()
+
+        pcd.points = o3d.utility.Vector3dVector(np.array([[0,0,0]]))
+        pcd.paint_uniform_color([0, 0, 1])
+
+        self.vis.add_geometry(pcd)
         self.vis.register_selection_changed_callback(self.start_stop_handler)
         self.vis.run()  # user picks points
 
@@ -216,7 +257,9 @@ class global_planner():
             self.vis.destroy_window()
 
 
-    
+    def pose_callback(self, msg):
+        self.base_pose = msg.pose.pose
+
 
     def check_neighbor_feasibility(self, adj_list, vertex_index, neighbor_index):
         # check if the neighbor is a wall
@@ -351,8 +394,11 @@ class ros_planner(Node):
 
 def main():
     # global_planner("/home/daniel/Documents/master/isaac_map.ply", "/home/daniel/Documents/master/valid_points.npy")
-    # global_planner("/home/daniel/Documents/master/isaac_map.ply", "/home/daniel/Documents/master/valid_points_0.8_2.npy")
-    planner = global_planner("/home/danitech/master_ws/src/Danitech-master/wagon_navigation/wagon_navigation/pose_data/isaac_map.ply", "/home/danitech/master_ws/src/Danitech-master/wagon_navigation/wagon_navigation/pose_data/valid_points_0.8_2.npy")
+    # planner =  global_planner("/home/daniel/Documents/master/isaac_map.ply", "/home/daniel/Documents/master/valid_points_0.8_2.npy")
+    planner =  global_planner("/home/daniel/Documents/master/maps/quarray_map.ply", "/home/daniel/Documents/master/quarrayvalid_points_0.9_2.npy")
+    # planner =  global_planner("/home/daniel/Documents/master/maps/quarray_map.ply", "/home/daniel/Documents/master/valid_points_0.8_2.npy")
+
+    #planner = global_planner("/home/danitech/master_ws/src/Danitech-master/wagon_navigation/wagon_navigation/pose_data/isaac_map.ply", "/home/danitech/master_ws/src/Danitech-master/wagon_navigation/wagon_navigation/pose_data/valid_points_0.8_2.npy")
     #global_planner("/home/daniel/Documents/master/isaac_map.ply", False)
     rclpy.init()
     ros_planner(planner.get_global_waypoints())

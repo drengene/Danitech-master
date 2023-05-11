@@ -247,19 +247,30 @@ class articulationController(Node):
 
     def control_vehicle2(self):
 
-        if np.linalg.norm(self.base_link_position - self.waypoints[-2]) < 0.5:
-            print("Reached Final Waypoint, saving to data to file" )
-            self.send_twist(0.0,0.0)
+        if self.waypoint_index <= len(self.waypoints)-1:
 
 
-            with open("/home/danitech/master_ws/src/Danitech-master/wagon_navigation/wagon_navigation/pose_data/" + str(datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")) + "max_vel_" + str(MAX_VEL) + ".pkl", "wb") as f:
-                pickle.dump({'base_pose' : self.base_poses, 'base_or' : self.base_orrientations, 'wayposes' : self.wayposes, 'twist_msgs' : self.twist_msgs, 'max_vel' : MAX_VEL, 'waypoints' : self.waypoints}, f)
+            angle_diff, direction = self.angle_between_base_point(self.base_link_position, self.base_link_orientation, self.waypoints[self.waypoint_index], get_direction=True)
+            angle = angle_diff
 
-            #np.save("/home/danitech/master_ws/src/Danitech-master/wagon_navigation/wagon_navigation/pose_data/" + str(datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")) + ".npy", [self.base_poses, self.base_orrientations, self.wayposes])
+            # print("Angle_pi: ", 1-(abs(angle/np.pi)))
+            self.send_twist(MAX_VEL * (1-abs(angle/np.pi)), angle*1.5) # Add regulatation if diff is larger than max angle, e.g. lower speed
 
 
-            return 1
-        
+            if np.linalg.norm(self.base_link_position - self.waypoints[-1]) < 1:
+                print("Reached Final Waypoint, saving to data to file" )
+                self.send_twist(0.0,0.0)
+
+
+                with open("/home/danitech/master_ws/src/Danitech-master/wagon_navigation/wagon_navigation/pose_data/" + str(datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")) + "max_vel_" + str(MAX_VEL) + ".pkl", "wb") as f:
+                    pickle.dump({'base_pose' : self.base_poses, 'base_or' : self.base_orrientations, 'wayposes' : self.wayposes, 'twist_msgs' : self.twist_msgs, 'max_vel' : MAX_VEL, 'waypoints' : self.waypoints}, f)
+
+                #np.save("/home/danitech/master_ws/src/Danitech-master/wagon_navigation/wagon_navigation/pose_data/" + str(datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")) + ".npy", [self.base_poses, self.base_orrientations, self.wayposes])
+
+                return 1
+            else:
+                return 0
+            
         angle_diff, direction = self.angle_between_base_point(self.base_link_position, self.base_link_orientation, self.waypoints[self.waypoint_index], get_direction=True)
         angle_diff_next = self.angle_between_base_point(self.base_link_position, self.base_link_orientation, self.waypoints[self.waypoint_index+1])
 
