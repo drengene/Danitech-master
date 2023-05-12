@@ -353,7 +353,7 @@ def main():
     # global_planner("/home/daniel/Documents/master/isaac_map.ply", "/home/daniel/Documents/master/valid_points.npy")
     # global_planner("/home/daniel/Documents/master/isaac_map.ply", "/home/daniel/Documents/master/valid_points_0.8_2.npy")
     planner = global_planner("/home/danitech/master_ws/src/Danitech-master/wagon_navigation/wagon_navigation/pose_data/isaac_map.ply", "/home/danitech/master_ws/src/Danitech-master/wagon_navigation/wagon_navigation/pose_data/valid_points_0.8_2.npy")
-    #global_planner("/home/daniel/Documents/master/isaac_map.ply", False)
+    #planner = global_planner("/home/daniel/Documents/master/isaac_map.ply", False)
     rclpy.init()
     ros_planner(planner.get_global_waypoints())
 
