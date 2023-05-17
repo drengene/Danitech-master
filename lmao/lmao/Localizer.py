@@ -6,6 +6,8 @@ import lmao_lib.world as World
 import lmao_lib.util.pclmao as pclmao
 from lmao_lib.mapping import get_normals
 
+import os
+
 from scipy.spatial.transform import Rotation as R
 import scipy.ndimage as ndimage
 from sklearn.metrics.pairwise import paired_cosine_distances
@@ -26,10 +28,11 @@ from rclpy.callback_groups import MutuallyExclusiveCallbackGroup
 
 # Import odometry message
 from nav_msgs.msg import Odometry
-from geometry_msgs.msg import TransformStamped, PoseStamped
+from geometry_msgs.msg import TransformStamped, PoseStamped, Transform
 from builtin_interfaces.msg import Time
 
 # Tf2
+import tf2_ros
 from tf2_ros import TransformException
 from tf2_ros.buffer import Buffer
 from tf2_ros.transform_listener import TransformListener
@@ -45,6 +48,8 @@ cv2.namedWindow("Probabilities", cv2.WINDOW_NORMAL)
 cv2.namedWindow("Lidar", cv2.WINDOW_NORMAL)
 cv2.namedWindow("Dummy Lidar", cv2.WINDOW_NORMAL)
 
+SAVEFIGS = False
+
 class Localizer(Node):
 	def __init__(self):
 		np.seterr(divide='ignore')
@@ -55,8 +60,8 @@ class Localizer(Node):
 
 		# Declare parameters
 		from rcl_interfaces.msg import ParameterDescriptor
-		#self.declare_parameter('map_path', '/home/junge/Documents/mesh_map/map.ply', ParameterDescriptor(description="Path to the map file"))
-		self.declare_parameter('map_path', "/home/danitech/Documents/maps/easter_island_boy.ply", ParameterDescriptor(description="Path to the map file"))
+		self.declare_parameter('map_path', '/home/junge/Documents/mesh_map/easter_island_boy.ply', ParameterDescriptor(description="Path to the map file"))
+		#self.declare_parameter('map_path', "/home/danitech/Documents/maps/easter_island_boy.ply", ParameterDescriptor(description="Path to the map file"))
 		self.declare_parameter('lidar_topic', "/wagon/base_scan/lidar_data", ParameterDescriptor(description="Topic to subscribe to for lidar data"))
 		self.declare_parameter('max_range', 90000, ParameterDescriptor(description="Maximum range of the lidar in mm"))
 		self.declare_parameter('min_range', 2300, ParameterDescriptor(description="Minimum range of the lidar in mm"))
@@ -144,12 +149,41 @@ class Localizer(Node):
 		self.particle_pcd.colors = o3d.utility.Vector3dVector(colors)
 
 		avg_pos, avg_rot = self.get_centroid()
-		self.send_transform(avg_pos, avg_rot)
+
+		# Get transform from base_scan to odom. This is the transform from the lidar to the odom zero
+		try:
+			BS2O = self.tf_buffer.lookup_transform("base_scan", "odom", self.clock)
+		except TransformException as e:
+			self.get_logger().error("Transform error: {}, when transforming from {} to {}".format(e, "base_scan", "odom"))
+			return
+		
+		# Create TransformStamped of avg_pos and avg_rot
+		M2BS = Transform()
+		M2BS.translation.x = avg_pos[0]
+		M2BS.translation.y = avg_pos[1]
+		M2BS.translation.z = avg_pos[2]
+		quat = avg_rot.as_quat()
+		M2BS.rotation.x = quat[0]
+		M2BS.rotation.y = quat[1]
+		M2BS.rotation.z = quat[2]
+		M2BS.rotation.w = quat[3]
+
+		# Calculate the combined transform from map to odom
+		M2O = M2BS * BS2O.transform
+
+		# Create TransformStamped of W2O
+		M2O_msg = TransformStamped()
+		M2O_msg.header.stamp = self.clock
+		M2O_msg.header.frame_id = "world"
+		M2O_msg.child_frame_id = "odom"
+		M2O_msg.transform = M2O
+		
+		# Publish the transform
+		self.tf_broadcaster.sendTransform(M2O_msg)
+
+		#self.send_transform(avg_pos, avg_rot)
 		self.average_pcd.points = o3d.utility.Vector3dVector(np.array([avg_pos]))
 		self.average_pcd.normals = o3d.utility.Vector3dVector(avg_rot.apply(np.array([[1, 0, 0]])))
-		# Move avergae arrow to position of average_pcd.points
-		# self.mesh_average_arrow.translate(avg_pos - self.mesh_average_arrow.get_center())
-		# self.mesh_average_arrow.rotate(avg_rot.as_matrix, center=avg_pos)
 
 		# self.viz.update_geometry(self.particle_pcd)
 		self.viz.update_geometry(self.average_pcd)
@@ -450,9 +484,9 @@ class Localizer(Node):
 
 
 
-		plt.imshow(normals/2 + 0.5)
-		plt.show()
-		plt.imsave("normals.png", (normals/2 + 0.5)[:, :511, :])
+		#plt.imshow(normals/2 + 0.5)
+		#plt.show()
+		#plt.imsave("normals.png", (normals/2 + 0.5)[:, :511, :])
 
 		# Set self.lidar.rays as rays from the lidar
 		# Assert that all rays are not nan or inf
@@ -479,10 +513,9 @@ class Localizer(Node):
 		cv2.imshow("Virtual normals", abs(vnormals))
 		cv2.waitKey(1)
 		# Use matplotlib to show normals
-		plt.imshow(vnormals/2 + 0.5)
-		plt.show()
-		plt.imsave("virtual_normals.png", (vnormals/2 + 0.5)[:, :511, :])
-		exit()
+		#plt.imshow(vnormals/2 + 0.5)
+		#plt.show()
+		#plt.imsave("virtual_normals.png", (vnormals/2 + 0.5)[:, :511, :])
 
 		# Select rays for localization
 		ray_indices = self.select_rays(depth, xyz, 100, visualize=True)
@@ -523,30 +556,10 @@ class Localizer(Node):
 		for i, r in enumerate(self.rotations):
 			raycast_normals[i] = r.apply(raycast_normals[i])
 
-		# Show normals as 2d image in opencv that updates as new data comes in
-		#raycast_image = np.zeros((self.particles.shape[0], 128, 1024, 3))
-		#for i in range(self.particles.shape[0]):
-		#	raycast_image[i] = abs(raycast_normals[i].reshape(128, 1024, 3))
-
-		#cv2.imshow("Virtual normals", abs(raycast_image[0]))
-		#cv2.waitKey(1)
-
-
-		# print("Shape of raycast_normals: {}".format(raycast_normals.shape))
-		# print("Shape of actual_normals: {}".format(actual_normals.shape))
-
-		# print("Mean of raycast_depth: {}".format(np.mean(raycast_depth[0])))
-		# print("Mean of actual_depth: {}".format(np.mean(actual_depth)))
-
-		# print("Shape of raycast_depth: {}".format(raycast_depth.shape))
-		# print("Shape of actual_depth: {}".format(actual_depth.shape))
 
 		hard_depth = np.linalg.norm(raycast_depth[0] - actual_depth)
 		# print("Hard depth: {}".format(hard_depth))
 
-
-		# Calculate the error for all. raycast is [n, rays], actual is [rays]
-		#error_depth = raycast_depth - actual_depth
 		# Should be shape n
 		error_depth = np.linalg.norm(raycast_depth - actual_depth, axis=1).ravel()
 
@@ -555,9 +568,6 @@ class Localizer(Node):
 		# Calculate mean and variance of error
 		mean_depth = np.mean(error_depth[1])
 		var_depth = np.std(error_depth[1])
-		# print("Mean depth error: {}".format(mean_depth))
-		# print("StdDev depth error: {}".format(var_depth))
-		# print("Min depth error_ {}, max depth error: {}".format(np.min(error_depth[1]), np.max(error_depth[1])))
 
 		# Calculate the error for all. raycast is [n, rays, 3], actual is [rays, 3]
 		error_normal = np.linalg.norm(raycast_normals[:, :, 2][:, np.newaxis, :] - actual_normals[np.newaxis, :, 2], axis=2).ravel()
@@ -571,11 +581,6 @@ class Localizer(Node):
 		for i in range(self.particles.shape[0]):
 			#cosine_dist[i] = np.mean(paired_cosine_distances(actual_normals, raycast_normals[i]))
 			cosine_dist[i] = np.mean( np.square(paired_cosine_distances(actual_normals, raycast_normals[i])) )
-
-
-		# print("Shape of normal error: {}".format(error_normal.shape))
-		# print("Shape of depth error: {}".format(error_depth.shape))
-		# print("Shape of cosine_dist_normal: {}".format(cosine_dist_normal.shape))
 
 
 		# Print what order of indexes with the lowest error, ie [100, 69, 52] would mean that the 100th particle has the lowest error, 69th the second lowest and so on
@@ -629,19 +634,74 @@ class Localizer(Node):
 		self.counter += 1
 		if self.counter % 5 == 0:
 			self.resample_particles()
+
+
+	def plot_prob(self, p, name, n_selections = None, rows = None, cols = None, viz = False):
+		if SAVEFIGS == False:
+			return
+		# Get number of dimensions of numpy array p
+		dim = len(p.shape)
+		if dim == 3:
+			p_local = p[:, :, 0]
+		else:
+			p_local = p
+
+
+		# Create image of probabilities
+		#prob_image = np.zeros((p_local.shape[0], p_local.shape[1], 3))
+		# Set the probabilities as the all (so it goes from black to white)
+
+		cmap = plt.get_cmap('viridis')
+		# Normalize the probabilities to 0-1
+		prob_array = (p_local-np.min(p_local)) / (np.max(p_local)-np.min(p_local))
+		prob_image = cmap(prob_array)
+		# Remove alpha channel
+		prob_image = prob_image[:, :, :3]
+
+		#prob_image[:, :, 0] = (p_local-np.min(p_local)) / (np.max(p_local)-np.min(p_local))
+		#prob_image[:, :, 1] = (p_local-np.min(p_local)) / (np.max(p_local)-np.min(p_local))
+		#prob_image[:, :, 2] = (p_local-np.min(p_local)) / (np.max(p_local)-np.min(p_local))
+
+		if rows is not None and cols is not None:
+			prob_image[rows, cols, :] = [0.5, 0.5, 0.1]
+
+		if n_selections is not None:
+			random_indices = np.random.choice(p_local.shape[0] * p_local.shape[1], size=n_selections, replace=False, p=(p_local / np.sum(p_local)).ravel())
+			selected_indices = np.unravel_index(random_indices, (128, 1024))
+			prob_image[selected_indices[0], selected_indices[1], :] = [1, 0, 0]
+
+		# Show the image
+		if viz:
+			plt.imshow(prob_image)
+			plt.title(name)
+			plt.show()
+		plt.imsave(__file__[:-3] + "_" + name + ".png", prob_image)
+
 			
 
 
 	def select_rays(self, depth, xyz, amount, visualize=False):
+		# Find all places where depth outside min and max range
+		rows, cols, _ = np.where((depth < self.min_range) | (depth > self.max_range))
+
 		# Get the normals
 		normals = get_normals(xyz)
 
 		# Calculate gradient of depth
 		depth_gradient = np.gradient(depth, axis=(0, 1))
 		depth_gradient = np.abs(depth_gradient[0]) + np.abs(depth_gradient[1])
+		max_gradient = np.max(depth_gradient)
+		depth_gradient[np.isinf(depth_gradient)] = max_gradient
+		depth_gradient[np.isnan(depth_gradient)] = max_gradient
 
-		# Find all places where depth outside min and max range
-		rows, cols, _ = np.where((depth < self.min_range) | (depth > self.max_range))
+		depth_gradient = 1/(10+depth_gradient)
+		
+		depth_gradient[rows, cols] = 0
+
+		depth_gradient = depth_gradient / np.sum(depth_gradient)
+
+
+		
 
 		normals[rows, cols, :] = 0
 		depth[rows, cols] = 0
@@ -661,39 +721,53 @@ class Localizer(Node):
 		probabilities2 = np.zeros((128, 1024))
 		probabilities2[nonzero_indices[0], nonzero_indices[1]] = probabilities
 		# Scale the probabilities to 0-1
-		dist_probabilities = (probabilities2 / np.max(probabilities2))
 		
-		# Invert depth gradient, such that lower values are more likely to be selected
-		depth_gradient = 1.0 / depth_gradient
+		#dist_probabilities = (probabilities2 / np.max(probabilities2))
+		depth[np.isinf(depth)] = self.max_range
+		depth[np.isnan(depth)] = self.max_range
+		dist_probabilities = 1 / (1 + depth)
+		dist_probabilities[rows, cols] = 0
+		dist_probabilities = dist_probabilities / np.sum(dist_probabilities)
 
-		# Set nan to 0
-		depth_gradient[np.isinf(depth_gradient)] = 0
+		print("Max dept_gradient: {}".format(np.max(depth_gradient)))
+		print("Min dept_gradient: {}".format(np.min(depth_gradient)))
+		print("Size of depth_gradient: {}".format(depth_gradient.shape))
+		print("Max dist_probabilities: {}".format(np.max(dist_probabilities)))
+		print("Min dist_probabilities: {}".format(np.min(dist_probabilities)))
+		print("Size of dist_probabilities: {}".format(dist_probabilities.shape))
+		self.plot_prob(depth_gradient, "depth_gradient", n_selections=1000, rows=rows, cols=cols)
+		self.plot_prob(dist_probabilities, "dist_probabilities", n_selections=1000, rows=rows, cols=cols)
 
-		depth_gradient = np.clip(depth_gradient, 0.0, 1)
+		# # Invert depth gradient, such that lower values are more likely to be selected
+		# depth_gradient = 1.0 / depth_gradient
 
-		# Apply gaussian filter to depth gradient
-		depth_gradient = ndimage.gaussian_filter(depth_gradient, sigma=1.0)
-		
-		#plt.imshow(depth_gradient)
-		#plt.show()
+		# # Set nan to 0
+		# depth_gradient[np.isinf(depth_gradient)] = 0
 
-		# VIGTIG INFO
-		# VIGTIG INFO
-		# VIGTIG INFO
-		# Funktionen her til gradient probability skal skrives om så den bruger 1/(1+x) som funktion, så det stemmer overens med rapporten!!
+		# depth_gradient = np.clip(depth_gradient, 0.0, 1)
+
+		# # Apply gaussian filter to depth gradient
+		# depth_gradient = ndimage.gaussian_filter(depth_gradient, sigma=1.0)
+
+		# #Scale depth gradient to 0-1
+		# depth_gradient = (depth_gradient / np.max(depth_gradient))[:,:,0] # Otherwise is [m,n,1]
+
+		# Set nan to max gradient
 
 
-		#Scale depth gradient to 0-1
-		depth_gradient = (depth_gradient / np.max(depth_gradient))[:,:,0] # Otherwise is [m,n,1]
 
 		# print("Depth gradient shape: {}".format(depth_gradient.shape))
 		# print("Dist probabilities shape: {}".format(dist_probabilities.shape))
 
 		# Average the two probabilities
-		probabilities = depth_gradient*0.5 + dist_probabilities*0.5
-		#probabilities = depth_gradient * dist_probabilities
+		probabilities = depth_gradient*0.3 + dist_probabilities*0.7
+		probabilities_multiply = depth_gradient * dist_probabilities
+		probabilities_multiply = probabilities_multiply / np.sum(probabilities_multiply)
 
+		self.plot_prob(probabilities, "probabilities", n_selections=1000, rows=rows, cols=cols)
+		self.plot_prob(probabilities_multiply, "probabilities_multiply", n_selections=1000, rows=rows, cols=cols)
 		probabilities[rows, cols] = 0
+		probabilities = probabilities[:,:,0]
 
 		random_indices = np.random.choice(probabilities.shape[0] * probabilities.shape[1], size=amount, replace=False, p=(probabilities / np.sum(probabilities)).ravel())
 		
@@ -706,7 +780,6 @@ class Localizer(Node):
 			probabilities_image[:,:,0] = probabilities
 			probabilities_image[selected_indices[0], selected_indices[1]] = [0, 1, 0]
 			cv2.imshow("Probabilities", probabilities_image)
-
 		return selected_indices
 
 
