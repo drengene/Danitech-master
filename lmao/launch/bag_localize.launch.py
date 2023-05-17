@@ -6,8 +6,8 @@ from launch_ros.actions import Node
 
 def generate_launch_description():
 	# Declare the launch arguments
-	bag_file_arg = '/home/junge/Documents/bags/montecarlo_dataset/rosbag2_2023_03_31-14_35_32'
-
+	bag_file_arg = '/home/danitech/Documents/bags/montecarlo_dataset/random_world_random_path'
+	map_file_arg = '/home/danitech/Documents/maps/full_map.ply'
 	# Play the rosbag
 	rosbag_player = ExecuteProcess(
 		cmd=['ros2', 'bag', 'play', bag_file_arg],
@@ -26,13 +26,14 @@ def generate_launch_description():
 		package='lmao',
 		executable='Localizer',
 		name='localizer',
-		output='screen'        
+		output='screen',
+		parameters=[{'map_path': map_file_arg}],     
 	)
 	
 
 	# Include the launch description
 	return LaunchDescription([
 		rosbag_player,
-		world_tf_pub,
+		#world_tf_pub,
 		node
 	])

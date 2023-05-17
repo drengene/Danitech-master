@@ -99,7 +99,7 @@ class WheelOdometry(Node):
 
 			# Publish the wheel odometry
 			self.publisher.publish(wheel_odom_front)
-			self.publisher.publish(wheel_odom_rear)
+			# self.publisher.publish(wheel_odom_rear)
 
 		
 	def configure_index(self, msg):

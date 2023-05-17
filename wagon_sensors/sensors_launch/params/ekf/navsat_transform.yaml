@@ -49,3 +49,9 @@ navsat_transform_node:
 # and heading in radians. As navsat_transform_node assumes an ENU standard, a 0 heading corresponds to east.
         datum: [55.3667194, 10.3753, 0.0]
 
+
+        initial_state: [0.0, 0.0, 0.5,
+                        0.0, 0.0, 0.0,
+                        0.0, 0.0, 0.0,
+                        0.0, 0.0, 0.0,
+                        0.0, 0.0, 0.0]

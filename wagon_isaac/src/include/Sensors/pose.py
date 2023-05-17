@@ -10,8 +10,8 @@ from geometry_msgs.msg import PoseWithCovariance, TwistWithCovariance
 from nav_msgs.msg import Odometry
 
 class pose_pub(Node):
-    def __init__(self, pose_prim_path="/wagon/base_link", frame_id="base_link"):
-        super().__init__('isaac_' + frame_id + '_publisher')
+    def __init__(self, pose_prim_path="/wagon/base_link", frame_id="world", child_frame="base_link" ):
+        super().__init__('isaac_' + child_frame + '_publisher')
         self.stage = usd.get_context().get_stage()      # Used to access Geometry
         # self.transform_utils = core.get_transform_utils()  # Used to access Geometry
         self.sim_context =  core.SimulationContext()        # Used to interact with simulation
@@ -19,6 +19,7 @@ class pose_pub(Node):
         #self.pose_prim.SetAttribute("physics:localSpaceVelocities", 1) # Virker ikke 
         self.world_prim = self.stage.GetPrimAtPath("/world")
         self.frame_id = frame_id
+        self.child_frame = child_frame
         self.odom_pub = self.create_publisher(Odometry, pose_prim_path + "_pose_gt", 10)
 
         self.pose_msg = PoseWithCovariance()
@@ -33,7 +34,7 @@ class pose_pub(Node):
         odom_msg.header.stamp.sec = int(sim_time)
         odom_msg.header.stamp.nanosec = int((sim_time - int(sim_time)) * 1e9)
         odom_msg.header.frame_id = self.frame_id
-        odom_msg.child_frame_id = "base_link"
+        odom_msg.child_frame_id = self.child_frame
         pos = self.pose_prim.GetAttribute("xformOp:translate").Get()
         orr = self.pose_prim.GetAttribute("xformOp:orient").Get()
         orr_imag = orr.GetImaginary()

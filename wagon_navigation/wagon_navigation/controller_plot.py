@@ -17,6 +17,7 @@ def load_latest_file(folder_path):
     with open(files[0], 'rb') as f:
         data = pickle.load(f)
 
+    #print(data)
     return data
 
 
@@ -168,11 +169,14 @@ def find_first_closes_point(base_pose, wayposes):
         diff_old = diff
 
 # specify the folder path where your pickle files are stored
-#folder_path = '/home/daniel/master_ws/src/Danitech-master/wagon_navigation/wagon_navigation/pose_data/'
-folder_path = '/home/danitech/master_ws/src/Danitech-master/wagon_navigation/wagon_navigation/pose_data/'
+folder_path = '/home/daniel/master_ws/src/Danitech-master/wagon_navigation/wagon_navigation/pose_data/'
+#folder_path = '/home/danitech/master_ws/src/Danitech-master/wagon_navigation/wagon_navigation/pose_data/'
 
 # load the latest file in the folder
 data = load_latest_file(folder_path)
+
+print(len(data['base_link_gt']))
+exit()
 # extract the data you need
 base_pose = data['base_pose']
 base_or = data['base_or']
