@@ -596,6 +596,11 @@ class Localizer(Node):
 		#plt.imshow(depth_gradient)
 		#plt.show()
 
+		# VIGTIG INFO
+		# VIGTIG INFO
+		# VIGTIG INFO
+		# Funktionen her til gradient probability skal skrives om så den bruger 1/(1+x) som funktion, så det stemmer overens med rapporten!!
+
 
 		#Scale depth gradient to 0-1
 		depth_gradient = (depth_gradient / np.max(depth_gradient))[:,:,0] # Otherwise is [m,n,1]
