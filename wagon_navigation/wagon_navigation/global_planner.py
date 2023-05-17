@@ -27,11 +27,15 @@ class global_planner():
 
         self.adj_list = self.adjacency_list(self.mesh_map)
 
-        if load_valid_points_from_path:
-            self.load_valid_verticies(load_valid_points_from_path)
-        else:
-            self.determine_valid_vertices(0.9, 2, "/home/daniel/Documents/master/quarray")
-        
+        # if load_valid_points_from_path:
+        #     self.load_valid_verticies(load_valid_points_from_path)
+        # else:
+        #     self.determine_valid_vertices(0.9, 2, "/home/daniel/Documents/master/quarray")
+                
+        self.valid_points = np.ones(self.verticies.shape[0])
+
+        self.valid_points[self.vertex_normals[:, 2] < 0.8] = 0
+
         self.start_stop_chooser(self.mesh_map)
         #self.destroy_subscription(pose_subscriber)
         #self.points = np.array([50970, 558829])
@@ -50,7 +54,6 @@ class global_planner():
 
     def load_ply_file(self, file_path):
         self.mesh_map = o3d.io.read_triangle_mesh(file_path)
-        # o3d.visualization.draw_geometries([self.mesh_map])
 
     def convert_to_tensor(self):
         self.mesh_map_t = o3d.t.geometry.TriangleMesh.from_legacy(self.mesh_map)
@@ -66,6 +69,7 @@ class global_planner():
         self.verticies = np.asarray(mesh.vertices)
         self.vertex_normals = np.asarray(mesh.vertex_normals)
         #points = self.verticies[self.path[1:-1]]
+        # o3d.visualization.draw_geometries([mesh])
 
         # self.pcd = o3d.geometry.PointCloud(o3d.utility.Vector3dVector(points))
         return mesh
@@ -106,7 +110,7 @@ class global_planner():
         if np.count_nonzero(self.valid_points) == 0:
             exit("No valid points found, try lowering the normal_z_threshold or choose correct ply file")
         invalid_points = np.where(self.valid_points == 0)[0] # create list of "hard" invalid point indexes
-
+        print("invalid points: ", invalid_points.shape)
         sys.setrecursionlimit(4000)
 
         # Can possibly be optimized by only looking at invalid points that have valid points as neighbors
@@ -149,6 +153,82 @@ class global_planner():
 
 
 
+    def determine_valid_vertices_(self, normal_z_threshold, invalidation_radius=1, path="/home/daniel/Documents/master/"):
+        self.valid_points = np.ones(self.verticies.shape[0])
+        self.visited_points = np.ones(self.verticies.shape[0]) * -1
+
+        self.valid_points[self.vertex_normals[:, 2] < normal_z_threshold] = 0
+        print("valid points: ", np.count_nonzero(self.valid_points))
+        if np.count_nonzero(self.valid_points) == 0:
+            exit("No valid points found, try lowering the normal_z_threshold or choose correct ply file")
+        invalid_points = self.prep_world_for_random(self.mesh_map, normal_z_threshold)
+        print("invalid points: ", invalid_points.shape)
+        sys.setrecursionlimit(4000)
+
+        # Can possibly be optimized by only looking at invalid points that have valid points as neighbors
+        for point_idx in invalid_points:
+            # print("invalid point: ", point_idx)
+            self.recursive_i = 0
+            self.invalidate_in_radius_(self.adj_list, invalidation_radius, point_idx, point_idx) # point_idx is given twice, since we have to compare the distance from the oringal invalid point
+            #print("recursive calls: ", self.recursive_i)
+
+        print("valid points after recursion: ", np.count_nonzero(self.valid_points))
+
+        # Save the valid points to a npy file
+        filename = "valid_points" + "_" + str(normal_z_threshold) + "_" + str(invalidation_radius) + ".npy"
+        print("saving points to filename", path, filename)
+        np.save(path + filename, self.valid_points)
+
+
+    def invalidate_in_radius_(self, adj_list, radius, point_idx, neighbor_idx):
+        self.recursive_i += 1
+        if self.visited_points[neighbor_idx] == point_idx:
+            return
+        
+        self.visited_points[neighbor_idx] = point_idx
+
+
+        dist = np.linalg.norm(self.verticies[neighbor_idx] - self.verticies[point_idx])
+        # print("vertxe val_n", self.verticies[neighbor_idx], "neighbor_idx", neighbor_idx)
+        # print("vertxe val_p", self.verticies[point_idx], "point_idx", point_idx)
+
+        if dist > radius:
+            return
+        
+        self.valid_points[neighbor_idx] = 0
+
+
+        for neighbor in adj_list[neighbor_idx]:
+            self.invalidate_in_radius_(adj_list, radius, point_idx, neighbor)
+        
+
+    def prep_world_for_random(self, world, normal_z_threshold=0.8):
+        print("World has normals: ", world.has_triangle_normals(), "\nWorld has vertex normals: ", world.has_vertex_normals())
+        # Check if world triangles has normals
+        if not world.has_triangle_normals():
+            print("Computing normals")
+            # Compute normals
+            world.compute_triangle_normals()
+        else:
+            print("World has normals")
+        
+        # Remove all triangles with normal z < 0.8
+        print("Removing triangles with normal z < 0.8")
+        world.remove_triangles_by_mask(np.asarray(world.triangle_normals)[:, 2] < normal_z_threshold)
+        world.remove_unreferenced_vertices()
+        world = world.remove_degenerate_triangles()
+
+        # Find all non manifold edges and show them in red
+        non_manifold_edges_indicis = world.get_non_manifold_edges(allow_boundary_edges = False)
+        
+        # non_manifold_edges_indicies is open3d.cuda.pybind.utility.Vector2iVector
+        non_manifold_indices = np.array(non_manifold_edges_indicis).ravel()
+        
+        print("Shape of non manifold indices: ", non_manifold_indices.shape)
+        non_manifold_indices = np.unique(non_manifold_indices)
+        print("Shape of non manifold indices after unique: ", non_manifold_indices.shape)
+
+        return non_manifold_indices
 
     def color_path(self, triangle_mesh, path):
         # Get the vertex and face arrays from the triangle mesh
@@ -210,20 +290,25 @@ class global_planner():
      
         mesh.triangle_normals = o3d.utility.Vector3dVector(normals)
 
+        
         # Color all the points in the mesh that are not in self.valid_points
         colors = np.asarray(mesh.vertex_colors)
         
 
         index = np.where(self.valid_points == 1)[0]
 
-        print("index 0", self.vertex_normals[0,2])
-        normal_z_color = np.floor(self.vertex_normals[index, 2] * 100).flatten()
-        print(normal_z_color.shape, "vertex_normal 0")
+        print("index shape", self.vertex_normals.shape, colors.shape)
 
-        colors[index] = [0, 0, normal_z_color]
+        # colors[index] = [0, 0, normal_z_color]
         # colors[self.valid_points == 1] = [0, 0, self.vertex_normals[x][2]]
 
-        colors[self.valid_points == 0] = [1, 0, 0]
+        # colors[self.valid_points == 0] = [0.1, 0.1, 0]
+        for i in range(colors.shape[0]):
+            if i in index:
+                colors[i] = self.vertex_normals[i] * [1, 1, 0.2]
+            else:
+                colors[i] = [0.5, 0.5, 0.5]
+        # colors[self.valid_points == 1] = [0, 0, self.vertex_normals[:][2]]
         mesh.vertex_colors = o3d.utility.Vector3dVector(colors)
 
 
@@ -297,14 +382,7 @@ class global_planner():
         if np.all(self.triangle_normals[tri_loc][:,2]) > 0.8:
             print(self.vertex_normals[neighbor_index][2])
 
-    def heuristic_cost_estimate(self, start_idx, end_idx):
 
-        start = self.verticies[start_idx]
-        end = self.verticies[end_idx]
-        return np.linalg.norm(start-end)
-    
-
-    
     def a_star(self, adj_list, start_index, goal_index):
         frontier = [(0, start_index, None)]
         explored = set()
@@ -340,6 +418,14 @@ class global_planner():
                     heapq.heappush(frontier, neighbor_node)
         
         return None
+
+    def heuristic_cost_estimate(self, start_idx, end_idx):
+
+        start = self.verticies[start_idx]
+        end = self.verticies[end_idx]
+        return np.linalg.norm(start-end)
+    
+
     
     def convert_path(self, path):
 
@@ -394,8 +480,8 @@ class ros_planner(Node):
 
 def main():
     # global_planner("/home/daniel/Documents/master/isaac_map.ply", "/home/daniel/Documents/master/valid_points.npy")
-    # planner =  global_planner("/home/daniel/Documents/master/isaac_map.ply", "/home/daniel/Documents/master/valid_points_0.8_2.npy")
-    planner =  global_planner("/home/daniel/Documents/master/maps/quarray_map.ply", "/home/daniel/Documents/master/quarrayvalid_points_0.9_2.npy")
+    planner =  global_planner("/home/daniel/Documents/master/maps/easter_island_boy.ply", "/home/daniel/Documents/master/valid_points_0.8_2.npy")
+    #planner =  global_planner("/home/daniel/Documents/master/maps/quarray_map.ply", "/home/daniel/Documents/master/quarrayvalid_points_0.9_2.npy")
     # planner =  global_planner("/home/daniel/Documents/master/maps/quarray_map.ply", "/home/daniel/Documents/master/valid_points_0.8_2.npy")
 
     #planner = global_planner("/home/danitech/master_ws/src/Danitech-master/wagon_navigation/wagon_navigation/pose_data/isaac_map.ply", "/home/danitech/master_ws/src/Danitech-master/wagon_navigation/wagon_navigation/pose_data/valid_points_0.8_2.npy")
