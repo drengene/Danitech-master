@@ -274,7 +274,7 @@ class IsaacSim(Node):
         wheel_material = PhysicsMaterial(
             name="wheel_material",
             static_friction=7,
-            dynamic_friction=1.0,
+            dynamic_friction=2.5,
             restitution=0.1,
             prim_path= self.wagon_prim_path + "/wheels_material"
         )
@@ -385,8 +385,8 @@ def main():
 
     joint_states = joint_state_pub("wagon")
     gps_module = gps_pub( isaac_sim.wagon_prim_path + "/rtk_pole", init_lat=55.471650, init_lon=10.328990)
-    pose_publisher = pose_pub(isaac_sim.wagon_prim_path + "/base_link", "odom")
-    rear_pose_publisher = pose_pub(isaac_sim.wagon_prim_path + "/rear_link", "odom", "rear_link")
+    pose_publisher = pose_pub(isaac_sim.wagon_prim_path + "/base_link", "world")
+    rear_pose_publisher = pose_pub(isaac_sim.wagon_prim_path + "/rear_link", "world", "rear_link")
     i = 0
 
     isaac_sim.play_world()

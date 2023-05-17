@@ -24,7 +24,7 @@ import numpy as np
 
 FORWARDS = 1
 BACKWARDS = -1
-MAX_VEL = 4
+MAX_VEL = 2
 
 class articulationController(Node):
     
@@ -37,7 +37,7 @@ class articulationController(Node):
         self.declare_parameter('odom_frame', 'odom', ParameterDescriptor(description="Odometry frame name"))
         self.declare_parameter('world_frame', 'odom', ParameterDescriptor(description="World frame name"))
         self.declare_parameter('path_update_rate', 2, ParameterDescriptor(description="Update rate in Hz of the path generation"))
-        self.declare_parameter('manual_waypoints', 1, ParameterDescriptor(description="If true, waypoints are manually set by the user"))
+        self.declare_parameter('manual_waypoints', 0, ParameterDescriptor(description="If true, waypoints are manually set by the user"))
 
         self.cmd_vel_topic = self.get_parameter('cmd_vel_topic').value
         # self.joint_state_topic = self.get_parameter('joint_state_topic').value

@@ -27,27 +27,35 @@ class global_planner():
 
         self.adj_list = self.adjacency_list(self.mesh_map)
 
-        # if load_valid_points_from_path:
-        #     self.load_valid_verticies(load_valid_points_from_path)
-        # else:
-        #     self.determine_valid_vertices(0.9, 2, "/home/daniel/Documents/master/quarray")
+        if load_valid_points_from_path:
+           self.load_valid_verticies(load_valid_points_from_path)
+        else:
+           self.determine_valid_vertices(0.85, 1.5, "/home/danitech/Documents/maps/island_boy_")
                 
-        self.valid_points = np.ones(self.verticies.shape[0])
+        # self.valid_points = np.ones(self.verticies.shape[0])
 
-        self.valid_points[self.vertex_normals[:, 2] < 0.8] = 0
+        # self.valid_points[self.vertex_normals[:, 2] < 0.8] = 0
 
         self.start_stop_chooser(self.mesh_map)
         #self.destroy_subscription(pose_subscriber)
         #self.points = np.array([50970, 558829])
 
-        path = self.a_star(self.adj_list, self.points[0], self.points[1]) # start at 7000
+        path = None
+
+        for waypoint in range(self.points.shape[0]-1):
+            if path is None:
+                path = self.a_star(self.adj_list, self.points[waypoint], self.points[waypoint +1 ])
+            else:
+                path = np.concatenate((path, self.a_star(self.adj_list, self.points[waypoint], self.points[waypoint +1])[1:]))
+
+        # path = self.a_star(self.adj_list, self.points[0], self.points[1]) # start at 7000
         if path is None:
             print("No path found")
             sys.exit()
         
-        self.global_waypoints = self.convert_path(path)
-        
         self.color_path(normal_mesh, path)
+        
+        self.global_waypoints = self.convert_path(path)
 
     def get_global_waypoints(self):
         return self.global_waypoints
@@ -297,17 +305,21 @@ class global_planner():
 
         index = np.where(self.valid_points == 1)[0]
 
-        print("index shape", self.vertex_normals.shape, colors.shape)
-
+        print("coloring invalid points")        
         # colors[index] = [0, 0, normal_z_color]
         # colors[self.valid_points == 1] = [0, 0, self.vertex_normals[x][2]]
 
         # colors[self.valid_points == 0] = [0.1, 0.1, 0]
-        for i in range(colors.shape[0]):
-            if i in index:
-                colors[i] = self.vertex_normals[i] * [1, 1, 0.2]
-            else:
-                colors[i] = [0.5, 0.5, 0.5]
+
+        colors[:] = [0.5, 0.5, 0.5]
+        colors[index] = self.vertex_normals[index] * [0.7, 0.7, 0.2] + 0.5
+
+        # for i in range(colors.shape[0]):
+        #     if i in index:
+        #         colors[i] = self.vertex_normals[i] * [0.7, 0.7, 0.2] + 0.5
+
+        #     else:
+        #         colors[i] = [0.5, 0.5, 0.5]
         # colors[self.valid_points == 1] = [0, 0, self.vertex_normals[:][2]]
         mesh.vertex_colors = o3d.utility.Vector3dVector(colors)
 
@@ -338,8 +350,8 @@ class global_planner():
             self.points = np.append(self.points, int(picked_points[0].index))
             print("Current points: ", self.points)
         
-        if len(self.points) == 2:
-            self.vis.destroy_window()
+        # if len(self.points) == 2:
+        #     self.vis.destroy_window()
 
 
     def pose_callback(self, msg):
@@ -383,6 +395,48 @@ class global_planner():
             print(self.vertex_normals[neighbor_index][2])
 
 
+    # def a_star(self, adj_list, start_index, goal_index):
+    #     frontier = [(0, start_index, None)]
+    #     explored = set()
+    #     g_scores = {start_index: 0}
+        
+    #     def reconstruct_path(current_node):
+    #         path = [current_node[1]]
+    #         while current_node[2]:
+    #             current_node = current_node[2]
+    #             path.append(current_node[1])
+    #         return list(reversed(path))
+        
+    #     while frontier:
+    #         current_node = heapq.heappop(frontier)
+    #         if current_node[1] == goal_index:
+    #             return reconstruct_path(current_node)
+            
+    #         explored.add(current_node[1])
+            
+    #         for neighbor_index in adj_list[current_node[1]]:
+    #             if neighbor_index in explored:
+    #                 continue
+                
+    #             if not self.check_neighbor_feasibility(adj_list, current_node[1], neighbor_index):
+    #                 continue
+
+    #             cost_to_neighbor = g_scores[current_node[1]] + self.heuristic_cost_estimate(current_node[1], neighbor_index)
+    #             if neighbor_index not in g_scores or cost_to_neighbor < g_scores[neighbor_index]:
+    #                 g_scores[neighbor_index] = cost_to_neighbor
+    #                 heuristic_to_goal = self.heuristic_cost_estimate(neighbor_index, goal_index)
+    #                 f_score = cost_to_neighbor + heuristic_to_goal
+    #                 neighbor_node = (f_score, neighbor_index, current_node)
+    #                 heapq.heappush(frontier, neighbor_node)
+        
+    #     return None
+
+    # def heuristic_cost_estimate(self, start_idx, end_idx):
+
+    #     start = self.verticies[start_idx]
+    #     end = self.verticies[end_idx]
+    #     return np.linalg.norm(start-end)
+    
     def a_star(self, adj_list, start_index, goal_index):
         frontier = [(0, start_index, None)]
         explored = set()
@@ -409,7 +463,7 @@ class global_planner():
                 if not self.check_neighbor_feasibility(adj_list, current_node[1], neighbor_index):
                     continue
 
-                cost_to_neighbor = g_scores[current_node[1]] + self.heuristic_cost_estimate(current_node[1], neighbor_index)
+                cost_to_neighbor = g_scores[current_node[1]] + self.heuristic_cost_estimate(current_node[1], neighbor_index, current_node[2])
                 if neighbor_index not in g_scores or cost_to_neighbor < g_scores[neighbor_index]:
                     g_scores[neighbor_index] = cost_to_neighbor
                     heuristic_to_goal = self.heuristic_cost_estimate(neighbor_index, goal_index)
@@ -419,17 +473,38 @@ class global_planner():
         
         return None
 
-    def heuristic_cost_estimate(self, start_idx, end_idx):
+    def heuristic_cost_estimate(self, start_idx, end_idx, prev_idx=None):
+        if prev_idx:
+            a = self.verticies[prev_idx[1]]
+            b = self.verticies[start_idx]
+            c = self.verticies[end_idx]
+            ab = b-a
+            bc = c-b
+            # Find cosine similarity between the two vectors
+            cos_sim = np.dot(ab, bc)/(np.linalg.norm(ab)*np.linalg.norm(bc)) 
+            angle_price = 2 - cos_sim
 
         start = self.verticies[start_idx]
         end = self.verticies[end_idx]
-        return np.linalg.norm(start-end)
+        if prev_idx:
+            return np.linalg.norm(start-end) * angle_price
+        else:
+            return np.linalg.norm(start-end)
     
+    def convert_path(self, path, seperation=2):
 
-    
-    def convert_path(self, path):
-
-        global_path = self.verticies[path]
+        
+        # create global path only using points every 2 meters
+        global_path = [self.verticies[path[0]]]
+        for i in range(1, len(path)-1):
+            start = global_path[-1]
+            end = self.verticies[path[i]]
+            dist = np.linalg.norm(start-end)
+            if dist > seperation:
+                global_path.append(end)
+                print('appended point', end)
+        global_path = np.array(global_path)
+        # global_path = self.verticies[path]
         print(global_path)
 
 
@@ -471,6 +546,10 @@ class ros_planner(Node):
             pose.position.x = plan[i][0]
             pose.position.y = plan[i][1]
             pose.position.z = plan[i][2]
+            pose.orientation.x = 0.0
+            pose.orientation.y = 0.0
+            pose.orientation.z = 0.0
+            pose.orientation.w = 1.0
             path.poses.append(pose)
 
         self.path_pub.publish(path)
@@ -480,10 +559,10 @@ class ros_planner(Node):
 
 def main():
     # global_planner("/home/daniel/Documents/master/isaac_map.ply", "/home/daniel/Documents/master/valid_points.npy")
-    planner =  global_planner("/home/daniel/Documents/master/maps/easter_island_boy.ply", "/home/daniel/Documents/master/valid_points_0.8_2.npy")
+    # planner =  global_planner("/home/daniel/Documents/master/maps/easter_island_boy.ply", "/home/daniel/Documents/master/valid_points_0.8_2.npy")
     #planner =  global_planner("/home/daniel/Documents/master/maps/quarray_map.ply", "/home/daniel/Documents/master/quarrayvalid_points_0.9_2.npy")
     # planner =  global_planner("/home/daniel/Documents/master/maps/quarray_map.ply", "/home/daniel/Documents/master/valid_points_0.8_2.npy")
-
+    planner = global_planner("/home/danitech/Documents/maps/easter_island_boy.ply", "/home/danitech/Documents/maps/island_boy_valid_points_0.85_1.5.npy")
     #planner = global_planner("/home/danitech/master_ws/src/Danitech-master/wagon_navigation/wagon_navigation/pose_data/isaac_map.ply", "/home/danitech/master_ws/src/Danitech-master/wagon_navigation/wagon_navigation/pose_data/valid_points_0.8_2.npy")
     #global_planner("/home/daniel/Documents/master/isaac_map.ply", False)
     rclpy.init()
