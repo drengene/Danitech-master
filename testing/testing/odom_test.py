@@ -9,7 +9,7 @@ import time
 import datetime
 import pickle
 
-A_VEL = -2.0
+A_VEL = -0.5
 F_VEL = 4.0
 
 
@@ -25,8 +25,8 @@ class OdomTest(Node):
 
         self.setup_sub_publisher()
 
-        self.file_location = "/home/daniel/master_ws/src/Danitech-master/wagon_navigation/wagon_navigation/pose_data/"
-        #self.file_location = "/home/danitech/master_ws/src/Danitech-master/wagon_navigation/wagon_navigation/pose_data/"
+        # self.file_location = "/home/daniel/master_ws/src/Danitech-master/wagon_navigation/wagon_navigation/pose_data/"
+        self.file_location = "/home/danitech/master_ws/src/Danitech-master/wagon_navigation/wagon_navigation/pose_data/"
 
         #Check if file location exists
         if not os.path.exists(self.file_location):
@@ -107,9 +107,6 @@ class OdomTest(Node):
     def odom_rear_gt_callback(self, msg):
         # if self.reached_speed:
         self.odom_gt_msgs.append(msg)
-        if msg.twist.twist.linear.x >= self.cmd_vel_msg.linear.x * 0.9:
-            print("reached speed")
-            self.reached_speed = True
 
 
     def cmd_vel_callback(self, msg):
@@ -197,21 +194,26 @@ def main(args=None):
 
 
     # For 10 seconds pub cmd vel
-    for i in range(30):
+    for i in range(40):
         odom_test.pub_cmd_vel(F_VEL, A_VEL)
         rclpy.spin_once(odom_test)
         time.sleep(0.1)
 
-    for i in range(20):
+    for i in range(50):
         odom_test.pub_cmd_vel(F_VEL, 0.0)
         rclpy.spin_once(odom_test)
         time.sleep(0.1)
 
 
-    for i in range(30):
+    for i in range(40):
         odom_test.pub_cmd_vel(F_VEL, -A_VEL)
         rclpy.spin_once(odom_test)
         time.sleep(0.1)
+
+    for i in range(20):
+            odom_test.pub_cmd_vel(F_VEL, 0.0)
+            rclpy.spin_once(odom_test)
+            time.sleep(0.1)
 
 
 
@@ -230,3 +232,4 @@ def main(args=None):
     rclpy.shutdown()
 
 
+ 
