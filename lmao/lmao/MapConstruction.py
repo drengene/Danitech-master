@@ -103,7 +103,7 @@ class MapConstructor(Node):
 		self.world_frame = self.get_parameter("world_frame").value
 		self.odom_topic = self.get_parameter("odom_topic").value
 
-		self.map_path = "/home/danitech/Documents/square_map.ply"
+		self.map_path = "/home/danitech/Documents/maps/easter_island_boy.ply"
 
 		self.map_building = False
 
@@ -244,6 +244,8 @@ class MapConstructor(Node):
 
 	def timer_callback(self):
 		if self.map_building:
+			return
+		if self.points.shape[0] < 10000:
 			return
 		t0 = time.time()
 		self.map_building = True

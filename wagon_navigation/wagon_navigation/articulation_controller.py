@@ -24,7 +24,7 @@ import numpy as np
 
 FORWARDS = 1
 BACKWARDS = -1
-MAX_VEL = 2
+MAX_VEL = 4
 
 class articulationController(Node):
     
@@ -37,7 +37,7 @@ class articulationController(Node):
         self.declare_parameter('odom_frame', 'odom', ParameterDescriptor(description="Odometry frame name"))
         self.declare_parameter('world_frame', 'odom', ParameterDescriptor(description="World frame name"))
         self.declare_parameter('path_update_rate', 2, ParameterDescriptor(description="Update rate in Hz of the path generation"))
-        self.declare_parameter('manual_waypoints', False, ParameterDescriptor(description="If true, waypoints are manually set by the user"))
+        self.declare_parameter('manual_waypoints', 1, ParameterDescriptor(description="If true, waypoints are manually set by the user"))
 
         self.cmd_vel_topic = self.get_parameter('cmd_vel_topic').value
         # self.joint_state_topic = self.get_parameter('joint_state_topic').value
@@ -70,7 +70,6 @@ class articulationController(Node):
                 self.waypoints = np.array([[6.314, 1.616, 0.0], [13.768, 1.616, 0.0], [19.326, -1.1029, 0.0], [20.02, -4.45, 0.284], [19.75, -11.98, 1.665], [19.285, -18.48, 2.84], [18.45, -23.215, 3.215], [11.90, -24.39, 3.215],[-3.45, -22.88, 3.215],[-3.25, -17.00, 2.59], [-3.93, -9.92, 1.28], [-3.85, -3.28, 0.07], [1.726, 0.75, 0.0], [5.34, 2.355, 0.0]])
                 self.setup_sub_pub()
                 self.gen_init_path(self.waypoints)
-                exit()
             else:
                 print("Waiting for goal position or path")
                 self.setup_sub_pub()
@@ -115,7 +114,7 @@ class articulationController(Node):
                                                     self.base_link_position[1] + 2 * np.sin(self.base_link_orientation[2]),
                                                       self.base_link_position[2]], axis=0)
 
-        self.spline = self.gen_spline(_waypoints, 2)
+        self.spline = self.gen_spline(_waypoints, 2.2)
 
         # create a copy of waypoints with 4 additional dimensions
         self.wayposes = np.zeros((len(self.spline), 7))
@@ -149,7 +148,8 @@ class articulationController(Node):
         self.clock_sub = self.create_subscription(Clock, "/clock", self.clock_callback, 10)
         self.global_plan_sub = self.create_subscription(PoseArray, "/global_plan", self.global_plan_callback, 10)
         self.update_timer = self.secs + self.nanosecs * 1e-9
-        
+        self.waypose_publisher = self.create_publisher(PoseArray, "/wayposes", 10)
+
         # spin for a bit to get the first message
         for i in range(10):
             rclpy.spin_once(self, timeout_sec=0.1)
@@ -163,7 +163,6 @@ class articulationController(Node):
         rclpy.spin_once(self, timeout_sec=0.1)
         
         
-        self.waypose_publisher = self.create_publisher(PoseArray, "/wayposes", 10)
 
         self.marker_publisher = self.create_publisher(MarkerArray, "/markers", 10)
         self.point_publisher = self.create_publisher(PointStamped, "/points", 10)
@@ -247,8 +246,9 @@ class articulationController(Node):
 
     def control_vehicle2(self):
 
-        if self.waypoint_index <= len(self.waypoints)-1:
+        if self.waypoint_index >= len(self.waypoints)-1:
 
+            print("nearing the end of the path")
 
             angle_diff, direction = self.angle_between_base_point(self.base_link_position, self.base_link_orientation, self.waypoints[self.waypoint_index], get_direction=True)
             angle = angle_diff
@@ -380,7 +380,7 @@ class articulationController(Node):
 
         s_vals = np.array([])
 
-        if resolution*0.9 <= np.min(distances):
+        if np.any(resolution*0.9 <= np.min(distances)):
             print("resolution smaller than min distance")
             for idx, dist in enumerate(cumulative_distances[:-1], ):
                 num_points = int(np.ceil((cumulative_distances[idx + 1] - dist)/resolution))

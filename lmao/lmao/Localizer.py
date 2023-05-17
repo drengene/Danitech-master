@@ -26,11 +26,14 @@ from rclpy.callback_groups import MutuallyExclusiveCallbackGroup
 
 # Import odometry message
 from nav_msgs.msg import Odometry
+from geometry_msgs.msg import TransformStamped, PoseStamped
+from builtin_interfaces.msg import Time
 
 # Tf2
 from tf2_ros import TransformException
 from tf2_ros.buffer import Buffer
 from tf2_ros.transform_listener import TransformListener
+from tf2_ros.transform_broadcaster import TransformBroadcaster
 
 #Import cv2
 import cv2
@@ -52,8 +55,8 @@ class Localizer(Node):
 
 		# Declare parameters
 		from rcl_interfaces.msg import ParameterDescriptor
-		self.declare_parameter('map_path', '/home/junge/Documents/mesh_map/map.ply', ParameterDescriptor(description="Path to the map file"))
-		#self.declare_parameter('map_path', '/home/danitech/master_ws/src/Danitech-master/wagon_navigation/wagon_navigation/pose_data/isaac_map.ply', ParameterDescriptor(description="Path to the map file"))
+		#self.declare_parameter('map_path', '/home/junge/Documents/mesh_map/map.ply', ParameterDescriptor(description="Path to the map file"))
+		self.declare_parameter('map_path', "/home/danitech/Documents/maps/easter_island_boy.ply", ParameterDescriptor(description="Path to the map file"))
 		self.declare_parameter('lidar_topic', "/wagon/base_scan/lidar_data", ParameterDescriptor(description="Topic to subscribe to for lidar data"))
 		self.declare_parameter('max_range', 90000, ParameterDescriptor(description="Maximum range of the lidar in mm"))
 		self.declare_parameter('min_range', 2300, ParameterDescriptor(description="Minimum range of the lidar in mm"))
@@ -71,6 +74,7 @@ class Localizer(Node):
 		# Create tf2 buffer and listener
 		self.tf_buffer = Buffer()
 		self.tf_listener = TransformListener(self.tf_buffer, self)
+		self.tf_broadcaster = TransformBroadcaster(self)
 		
 		# Create publisher
 		self.odom_pub = self.create_publisher(Odometry, self.odom_topic, 10)
@@ -126,6 +130,8 @@ class Localizer(Node):
 		self.particle_full_resample_rate = 0.0
 		self.particles_to_keep = 0.2
 
+		self.clock = Time()
+
 		self.counter = 0
 
 	def viz_loop(self):
@@ -138,11 +144,12 @@ class Localizer(Node):
 		self.particle_pcd.colors = o3d.utility.Vector3dVector(colors)
 
 		avg_pos, avg_rot = self.get_centroid()
+		self.send_transform(avg_pos, avg_rot)
 		self.average_pcd.points = o3d.utility.Vector3dVector(np.array([avg_pos]))
 		self.average_pcd.normals = o3d.utility.Vector3dVector(avg_rot.apply(np.array([[1, 0, 0]])))
 		# Move avergae arrow to position of average_pcd.points
 		# self.mesh_average_arrow.translate(avg_pos - self.mesh_average_arrow.get_center())
-		#self.mesh_average_arrow.rotate(avg_rot.as_matrix, center=avg_pos)
+		# self.mesh_average_arrow.rotate(avg_rot.as_matrix, center=avg_pos)
 
 		# self.viz.update_geometry(self.particle_pcd)
 		self.viz.update_geometry(self.average_pcd)
@@ -152,10 +159,37 @@ class Localizer(Node):
 		# self.mesh_average_arrow.rotate(avg_rot.inv().as_matrix, center=avg_pos)
 
 
+	def send_transform(self, translation, rotation):
+		t = TransformStamped()
+		t.header.stamp = self.clock
+		t.header.frame_id = "base_link"
+		t.child_frame_id = "map"
+
+		# Create transformation matrix
+		transform = np.eye(4)
+		transform[:3, :3] = rotation.as_matrix()
+		transform[:3, 3] = translation
+		# Compute inverse transformation
+		transform = np.linalg.inv(transform)
+		# Extract inverse translation and rotation
+		t.transform.translation.x = transform[0, 3]
+		t.transform.translation.y = transform[1, 3]
+		t.transform.translation.z = transform[2, 3]
+		quat = R.from_matrix(transform[:3, :3]).as_quat()
+		t.transform.rotation.x = quat[0]
+		t.transform.rotation.y = quat[1]
+		t.transform.rotation.z = quat[2]
+		t.transform.rotation.w = quat[3]
+
+		# Publish transform
+		self.tf_broadcaster.sendTransform(t)
+		
+
 	def odom_callback(self, msg):
 		if self.stamp is None:
 			self.stamp = msg.header.stamp.sec + msg.header.stamp.nanosec * 1e-9
 			return
+		self.clock = msg.header.stamp
 		new_stamp = msg.header.stamp.sec + msg.header.stamp.nanosec * 1e-9
 		dt = new_stamp - self.stamp
 		self.stamp = new_stamp
@@ -314,8 +348,6 @@ class Localizer(Node):
 		return pos_avg, rot_avg
 
 
-
-
 	def init_particles(self, n, visualize=False):
 		# Create particles
 		self.n_particles = n
@@ -337,7 +369,6 @@ class Localizer(Node):
 		self.probabilities = np.ones(self.n_particles)/self.n_particles
 
 		
-
 		if visualize:
 			# Convert quats to a direction vector, by rotating [1, 0, 0]
 			dir_vecs = R.from_quat(quats).apply([1, 0, 0])
@@ -353,7 +384,6 @@ class Localizer(Node):
 		self.particles = np.hstack((self.particles, quats))
 
 		print("Particles shape: {}".format(self.particles.shape))
-
 
 
 	def lidar_callback(self, msg):
@@ -372,6 +402,8 @@ class Localizer(Node):
 			except TransformException as e:
 				self.get_logger().error("Transform error: {}, when transforming from {} to {}".format(e, msg.header.frame_id, self.world_frame))
 				return
+			
+		self.clock = msg.header.stamp
 
 		data = pclmao.extract_PointCloud2_data(msg)
 		# x = data["x"], y = data["y"], z = data["z"]
@@ -410,6 +442,17 @@ class Localizer(Node):
 		# Convert to 2d image
 		cv2.imshow("Normals", abs(normals))
 		cv2.waitKey(1)
+		# Get indices of depth < self.max_range
+		depth_mask = depth > self.max_range
+		normals[depth_mask[:, :, 0]] = 0
+		print("Depth mash shape: {}".format(depth_mask.shape))
+		print("Normals shape: {}".format(normals.shape))
+
+
+
+		plt.imshow(normals/2 + 0.5)
+		plt.show()
+		plt.imsave("normals.png", (normals/2 + 0.5)[:, :511, :])
 
 		# Set self.lidar.rays as rays from the lidar
 		# Assert that all rays are not nan or inf
@@ -432,8 +475,14 @@ class Localizer(Node):
 		vnormals = raycast['primitive_normals'].numpy()
 
 		# Show normals as 2d image in opencv that updates as new data comes in
+		vnormals[depth_mask[:, :, 0]] = 0
 		cv2.imshow("Virtual normals", abs(vnormals))
 		cv2.waitKey(1)
+		# Use matplotlib to show normals
+		plt.imshow(vnormals/2 + 0.5)
+		plt.show()
+		plt.imsave("virtual_normals.png", (vnormals/2 + 0.5)[:, :511, :])
+		exit()
 
 		# Select rays for localization
 		ray_indices = self.select_rays(depth, xyz, 100, visualize=True)
@@ -641,16 +690,16 @@ class Localizer(Node):
 
 		probabilities[rows, cols] = 0
 
-		probabilities_image = np.zeros((128, 1024, 3))
-		probabilities_image[:,:,0] = probabilities
-
 		random_indices = np.random.choice(probabilities.shape[0] * probabilities.shape[1], size=amount, replace=False, p=(probabilities / np.sum(probabilities)).ravel())
 		
 		selected_indices = np.unravel_index(random_indices, (128, 1024))
 
-		probabilities_image[selected_indices[0], selected_indices[1]] = [0, 1, 0]
+		
 
 		if visualize:
+			probabilities_image = np.zeros((128, 1024, 3))
+			probabilities_image[:,:,0] = probabilities
+			probabilities_image[selected_indices[0], selected_indices[1]] = [0, 1, 0]
 			cv2.imshow("Probabilities", probabilities_image)
 
 		return selected_indices
