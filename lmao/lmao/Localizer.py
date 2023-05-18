@@ -41,6 +41,9 @@ from tf2_ros.transform_broadcaster import TransformBroadcaster
 #Import cv2
 import cv2
 
+SAVEFIGS = False
+VIRTUAL_PLAYBACK = False
+
 # Create window for cv2
 cv2.namedWindow("Normals", cv2.WINDOW_NORMAL)
 cv2.namedWindow("Virtual normals", cv2.WINDOW_NORMAL)
@@ -48,7 +51,6 @@ cv2.namedWindow("Probabilities", cv2.WINDOW_NORMAL)
 cv2.namedWindow("Lidar", cv2.WINDOW_NORMAL)
 cv2.namedWindow("Dummy Lidar", cv2.WINDOW_NORMAL)
 
-SAVEFIGS = False
 
 class Localizer(Node):
 	def __init__(self):
@@ -421,37 +423,60 @@ class Localizer(Node):
 
 
 	def lidar_callback(self, msg):
-		# Attempt to get transform at time of message, otherwise get most recent
-		try:
-			# Get the true transform at the time of the message
-			t = self.tf_buffer.lookup_transform(self.world_frame, msg.header.frame_id, msg.header.stamp)
-		except TransformException as e:
-			# self.get_logger().warn("Transform error: {}, when transforming from {} to {}\n Trying most recent".format(e, msg.header.frame_id, self.world_frame))
-			t = None
-			
-		if t is None:
-			try:
-				# Get the most recent transform
-				t = self.tf_buffer.lookup_transform(self.world_frame, msg.header.frame_id, rclpy.time.Time())
-			except TransformException as e:
-				self.get_logger().error("Transform error: {}, when transforming from {} to {}".format(e, msg.header.frame_id, self.world_frame))
-				return
-			
 		self.clock = msg.header.stamp
-
 		data = pclmao.extract_PointCloud2_data(msg)
+
 		# x = data["x"], y = data["y"], z = data["z"]
 		# Shape of x: (1024, 128, 1)
 		xyz = np.dstack((data["x"], data["y"], data["z"]))
 		# Shape of xyz: (1024, 128, 3)
 		depth = data["range"]
 
-		# # extract the rotation and translation components of the transform
-		rotation = [t.transform.rotation.x, t.transform.rotation.y, t.transform.rotation.z, t.transform.rotation.w]
-		translation = [t.transform.translation.x, t.transform.translation.y, t.transform.translation.z]
-		
-		print("Actual translation: {}".format(translation))
-		print("Actual rotation: {}".format(rotation))
+		#Shape of xyz: (1024, 128, 3)
+		xyz = np.rot90(xyz, 1, (1, 0))
+		depth = np.rot90(depth, 1, (1, 0))
+
+		# Get the normals
+		normals = get_normals(xyz)
+
+
+		if VIRTUAL_PLAYBACK == True:
+			# Attempt to get transform at time of message, otherwise get most recent
+			try:
+				# Get the true transform at the time of the message
+				t = self.tf_buffer.lookup_transform(self.world_frame, msg.header.frame_id, msg.header.stamp)
+			except TransformException as e:
+				# self.get_logger().warn("Transform error: {}, when transforming from {} to {}\n Trying most recent".format(e, msg.header.frame_id, self.world_frame))
+				t = None
+				
+			if t is None:
+				try:
+					# Get the most recent transform
+					t = self.tf_buffer.lookup_transform(self.world_frame, msg.header.frame_id, rclpy.time.Time())
+				except TransformException as e:
+					self.get_logger().error("Transform error: {}, when transforming from {} to {}".format(e, msg.header.frame_id, self.world_frame))
+					return
+				
+			# # extract the rotation and translation components of the transform
+			rotation = [t.transform.rotation.x, t.transform.rotation.y, t.transform.rotation.z, t.transform.rotation.w]
+			translation = [t.transform.translation.x, t.transform.translation.y, t.transform.translation.z]
+			
+			print("Actual translation: {}".format(translation))
+			print("Actual rotation: {}".format(rotation))
+
+			# Create similar image from virtual world and lidar
+			rays = self.lidar.rotate_rays(rotation)
+			rays += [translation[0], translation[1], translation[2], 0, 0, 0]
+
+			raycast = self.world.cast_rays(rays)
+
+			vdepth = raycast['t_hit'].numpy()
+			vnormals = raycast['primitive_normals'].numpy()
+
+			# Show normals as 2d image in opencv that updates as new data comes in
+			vnormals[depth_mask[:, :, 0]] = 0
+			cv2.imshow("Virtual normals", abs(vnormals))
+			cv2.waitKey(1)
 
 		# # Construct the transformation matrix
 		# r = R.from_quat(rotation)
@@ -462,14 +487,6 @@ class Localizer(Node):
 		# #Shape of xyz: (1024, 128, 3)
 		# # Transform the data
 		# xyz = np.matmul(xyz, T[:3, :3].T) + T[:3, 3]
-
-
-		#Shape of xyz: (1024, 128, 3)
-		xyz = np.rot90(xyz, 1, (1, 0))
-		depth = np.rot90(depth, 1, (1, 0))
-
-		# Get the normals
-		normals = get_normals(xyz)
 
 		# Show normals as 2d image in opencv that updates as new data comes in
 		# Shape of normals: (1024, 128, 3)
@@ -496,22 +513,7 @@ class Localizer(Node):
 
 		#print("First lidar ray: {}".format(self.lidar.rays[0, 0, :]))
 		#print("First dummy lidar ray: {}".format(self.dummy_lidar.rays[0, 0, :]))
-		
 
-
-		# Create similar image from virtual world and lidar
-		rays = self.lidar.rotate_rays(rotation)
-		rays += [translation[0], translation[1], translation[2], 0, 0, 0]
-
-		raycast = self.world.cast_rays(rays)
-
-		vdepth = raycast['t_hit'].numpy()
-		vnormals = raycast['primitive_normals'].numpy()
-
-		# Show normals as 2d image in opencv that updates as new data comes in
-		vnormals[depth_mask[:, :, 0]] = 0
-		cv2.imshow("Virtual normals", abs(vnormals))
-		cv2.waitKey(1)
 		# Use matplotlib to show normals
 		#plt.imshow(vnormals/2 + 0.5)
 		#plt.show()
