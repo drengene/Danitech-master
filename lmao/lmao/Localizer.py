@@ -178,7 +178,7 @@ class Localizer(Node):
 		# Create TransformStamped of W2O
 		M2O_msg = TransformStamped()
 		M2O_msg.header.stamp = self.clock
-		M2O_msg.header.frame_id = "world"
+		M2O_msg.header.frame_id = "map"
 		M2O_msg.child_frame_id = "odom"
 		M2O_msg.transform.translation.x = M2O[0, 3]
 		M2O_msg.transform.translation.y = M2O[1, 3]
@@ -191,6 +191,7 @@ class Localizer(Node):
 		
 		# Publish the transform
 		self.tf_broadcaster.sendTransform(M2O_msg)
+		self.get_logger().info("Published transform from map to odom")
 
 		#self.send_transform(avg_pos, avg_rot)
 		self.average_pcd.points = o3d.utility.Vector3dVector(np.array([avg_pos]))
@@ -238,7 +239,7 @@ class Localizer(Node):
 		new_stamp = msg.header.stamp.sec + msg.header.stamp.nanosec * 1e-9
 		dt = new_stamp - self.stamp
 		self.stamp = new_stamp
-		print("dt: {}".format(dt))
+		# print("dt: {}".format(dt))
 		linear = np.array([msg.twist.twist.linear.x, msg.twist.twist.linear.y, msg.twist.twist.linear.z]) * dt
 		angular = np.array([msg.twist.twist.angular.x, msg.twist.twist.angular.y, msg.twist.twist.angular.z]) * dt
 		# Apply twist to particles
@@ -259,7 +260,7 @@ class Localizer(Node):
 		new_stamp = msg.header.stamp.sec + msg.header.stamp.nanosec * 1e-9
 		dt = new_stamp - self.stamp
 		self.stamp = new_stamp
-		print("dt: {}".format(dt))
+		# print("dt: {}".format(dt))
 		linear = np.array([msg.twist.twist.linear.x, msg.twist.twist.linear.y, msg.twist.twist.linear.z]) * dt
 		angular = np.array([msg.twist.twist.angular.x, msg.twist.twist.angular.y, msg.twist.twist.angular.z]) * dt
 		# Apply twist to particles
@@ -330,8 +331,8 @@ class Localizer(Node):
 			resample_n = int(self.particle_full_resample_rate * self.particles.shape[0])
 			# Replace the lowest resample_n probable particles with new ones
 			sorted_index = np.argsort(self.probabilities)
-			print("Particle probabilities: {}".format(self.probabilities))
-			print("Particles being replaced: {}".format(sorted_index[:resample_n]))
+			# print("Particle probabilities: {}".format(self.probabilities))
+			# print("Particles being replaced: {}".format(sorted_index[:resample_n]))
 			self.particles[sorted_index[:resample_n], :3] = self.world.get_probable_random_points(resample_n, poisson=True)
 			# Set the probabilities of the new particles to 1/n
 			self.probabilities[sorted_index[:resample_n]] = 1.0 / self.particles.shape[0]
@@ -362,7 +363,7 @@ class Localizer(Node):
 		# Add the new origo to the new directions
 		new_rays[:, :3] = new_origo
 		#new_rays[:, :3] += new_origo
-		print("New rays shape: {}".format(new_rays.shape))
+		# print("New rays shape: {}".format(new_rays.shape))
 		return new_rays.astype(np.float32)
 	
 
@@ -371,12 +372,12 @@ class Localizer(Node):
 		# Transform the rays for each particle
 		rays = self.get_particle_lidar_rays(target_rays)
 
-		print("Casting {} rays".format(rays.shape[0]))
+		# print("Casting {} rays".format(rays.shape[0]))
 		t0 = time.time()
 		raycast = self.world.scene.cast_rays(rays)
 		raycast_depth =raycast["t_hit"].numpy()
 		raycast_normals = raycast['primitive_normals'].numpy()
-		print("Time to cast rays: {}".format(time.time()-t0))
+		# print("Time to cast rays: {}".format(time.time()-t0))
 
 		# Reshape the raycast
 		raycast_normals = raycast_normals.reshape(self.n_particles, -1, 3) # Was (n_particles, 128, 1024, 3)
@@ -428,7 +429,7 @@ class Localizer(Node):
 		# Add the quaternions to the particles
 		self.particles = np.hstack((self.particles, quats))
 
-		print("Particles shape: {}".format(self.particles.shape))
+		# print("Particles shape: {}".format(self.particles.shape))
 
 
 	def lidar_callback(self, msg):
@@ -470,8 +471,8 @@ class Localizer(Node):
 			rotation = [t.transform.rotation.x, t.transform.rotation.y, t.transform.rotation.z, t.transform.rotation.w]
 			translation = [t.transform.translation.x, t.transform.translation.y, t.transform.translation.z]
 			
-			print("Actual translation: {}".format(translation))
-			print("Actual rotation: {}".format(rotation))
+			# print("Actual translation: {}".format(translation))
+			# print("Actual rotation: {}".format(rotation))
 
 			# Create similar image from virtual world and lidar
 			rays = self.lidar.rotate_rays(rotation)
@@ -505,8 +506,8 @@ class Localizer(Node):
 		# Get indices of depth < self.max_range
 		depth_mask = depth > self.max_range
 		normals[depth_mask[:, :, 0]] = 0
-		print("Depth mash shape: {}".format(depth_mask.shape))
-		print("Normals shape: {}".format(normals.shape))
+		# print("Depth mash shape: {}".format(depth_mask.shape))
+		# print("Normals shape: {}".format(normals.shape))
 
 
 
@@ -546,7 +547,7 @@ class Localizer(Node):
 		# rays = self.lidar.rays
 		# rays = rays.reshape(-1, 6)
 
-		print("Shape of rays: {}".format(rays.shape))
+		# print("Shape of rays: {}".format(rays.shape))
 
 		# Inject actual robot position into particle [0]
 		#self.particles[0] = np.array([translation[0], translation[1], translation[2], rotation[0], rotation[1], rotation[2], rotation[3]])
@@ -646,9 +647,9 @@ class Localizer(Node):
 
 		self.best_indices = np.argsort(self.probabilities)
 
-		print("Highest 5 probabilities: {}".format(np.flip( self.probabilities[self.best_indices[-5:]])))
-		print("Indices of highest 5 probabilities: {}".format(np.flip(self.best_indices[-5:])))
-		print("Best index: {}".format(self.best_index))
+		# print("Highest 5 probabilities: {}".format(np.flip( self.probabilities[self.best_indices[-5:]])))
+		# print("Indices of highest 5 probabilities: {}".format(np.flip(self.best_indices[-5:])))
+		# print("Best index: {}".format(self.best_index))
 
 		self.counter += 1
 		if self.counter % 5 == 0:
@@ -748,12 +749,12 @@ class Localizer(Node):
 		dist_probabilities[rows, cols] = 0
 		dist_probabilities = dist_probabilities / np.sum(dist_probabilities)
 
-		print("Max dept_gradient: {}".format(np.max(depth_gradient)))
-		print("Min dept_gradient: {}".format(np.min(depth_gradient)))
-		print("Size of depth_gradient: {}".format(depth_gradient.shape))
-		print("Max dist_probabilities: {}".format(np.max(dist_probabilities)))
-		print("Min dist_probabilities: {}".format(np.min(dist_probabilities)))
-		print("Size of dist_probabilities: {}".format(dist_probabilities.shape))
+		# print("Max dept_gradient: {}".format(np.max(depth_gradient)))
+		# print("Min dept_gradient: {}".format(np.min(depth_gradient)))
+		# print("Size of depth_gradient: {}".format(depth_gradient.shape))
+		# print("Max dist_probabilities: {}".format(np.max(dist_probabilities)))
+		# print("Min dist_probabilities: {}".format(np.min(dist_probabilities)))
+		# print("Size of dist_probabilities: {}".format(dist_probabilities.shape))
 		self.plot_prob(depth_gradient, "depth_gradient", n_selections=1000, rows=rows, cols=cols)
 		self.plot_prob(dist_probabilities, "dist_probabilities", n_selections=1000, rows=rows, cols=cols)
 
