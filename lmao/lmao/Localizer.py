@@ -137,7 +137,7 @@ class Localizer(Node):
 		self.particle_full_resample_rate = 0.0
 		self.particles_to_keep = 0.2
 
-		self.clock = Time()
+		self.clock = None
 
 		self.counter = 0
 
@@ -150,35 +150,44 @@ class Localizer(Node):
 		colors[:, 0] = 1 - (self.probabilities / np.max(self.probabilities))
 		self.particle_pcd.colors = o3d.utility.Vector3dVector(colors)
 
+		if self.clock is None:
+			return
+
 		avg_pos, avg_rot = self.get_centroid()
 
 		# Get transform from base_scan to odom. This is the transform from the lidar to the odom zero
 		try:
-			BS2O = self.tf_buffer.lookup_transform("base_scan", "odom", self.clock)
+			t = self.tf_buffer.lookup_transform("base_scan", "odom", self.clock)
 		except TransformException as e:
 			self.get_logger().error("Transform error: {}, when transforming from {} to {}".format(e, "base_scan", "odom"))
 			return
 		
-		# Create TransformStamped of avg_pos and avg_rot
-		M2BS = Transform()
-		M2BS.translation.x = avg_pos[0]
-		M2BS.translation.y = avg_pos[1]
-		M2BS.translation.z = avg_pos[2]
-		quat = avg_rot.as_quat()
-		M2BS.rotation.x = quat[0]
-		M2BS.rotation.y = quat[1]
-		M2BS.rotation.z = quat[2]
-		M2BS.rotation.w = quat[3]
+		BS2O = np.eye(4)
+		BS2O[:3, :3] = R.from_quat([t.transform.rotation.x, t.transform.rotation.y, t.transform.rotation.z, t.transform.rotation.w]).as_matrix()
+		BS2O[:3, 3] = [t.transform.translation.x, t.transform.translation.y, t.transform.translation.z]
+
+		# Create transformation matrix of avg_pos and avg_rot
+		M2BS = np.eye(4)
+		M2BS[:3, :3] = avg_rot.as_matrix()
+		M2BS[:3, 3] = avg_pos
+		
 
 		# Calculate the combined transform from map to odom
-		M2O = M2BS * BS2O.transform
+		M2O = np.matmul(BS2O, M2BS)
 
 		# Create TransformStamped of W2O
 		M2O_msg = TransformStamped()
 		M2O_msg.header.stamp = self.clock
 		M2O_msg.header.frame_id = "world"
 		M2O_msg.child_frame_id = "odom"
-		M2O_msg.transform = M2O
+		M2O_msg.transform.translation.x = M2O[0, 3]
+		M2O_msg.transform.translation.y = M2O[1, 3]
+		M2O_msg.transform.translation.z = M2O[2, 3]
+		quat = R.from_matrix(M2O[:3, :3]).as_quat()
+		M2O_msg.transform.rotation.x = quat[0]
+		M2O_msg.transform.rotation.y = quat[1]
+		M2O_msg.transform.rotation.z = quat[2]
+		M2O_msg.transform.rotation.w = quat[3]
 		
 		# Publish the transform
 		self.tf_broadcaster.sendTransform(M2O_msg)
@@ -225,7 +234,7 @@ class Localizer(Node):
 		if self.stamp is None:
 			self.stamp = msg.header.stamp.sec + msg.header.stamp.nanosec * 1e-9
 			return
-		self.clock = msg.header.stamp
+		#self.clock = msg.header.stamp
 		new_stamp = msg.header.stamp.sec + msg.header.stamp.nanosec * 1e-9
 		dt = new_stamp - self.stamp
 		self.stamp = new_stamp
