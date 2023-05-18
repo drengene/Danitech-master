@@ -557,7 +557,7 @@ class Localizer(Node):
 			raycast_normals[i] = r.apply(raycast_normals[i])
 
 
-		hard_depth = np.linalg.norm(raycast_depth[0] - actual_depth)
+		# hard_depth = np.linalg.norm(raycast_depth[0] - actual_depth)
 		# print("Hard depth: {}".format(hard_depth))
 
 		# Should be shape n
@@ -566,28 +566,36 @@ class Localizer(Node):
 		# print("Shape of error_depth: {}".format(error_depth.shape))
 
 		# Calculate mean and variance of error
-		mean_depth = np.mean(error_depth[1])
-		var_depth = np.std(error_depth[1])
+		# mean_depth = np.mean(error_depth[1])
+		# var_depth = np.std(error_depth[1])
 
-		# Calculate the error for all. raycast is [n, rays, 3], actual is [rays, 3]
-		error_normal = np.linalg.norm(raycast_normals[:, :, 2][:, np.newaxis, :] - actual_normals[np.newaxis, :, 2], axis=2).ravel()
+		# # Calculate the error for all. raycast is [n, rays, 3], actual is [rays, 3]
+		# error_normal = np.linalg.norm(raycast_normals[:, :, 2][:, np.newaxis, :] - actual_normals[np.newaxis, :, 2], axis=2).ravel()
 
 		# Calculate MSE for depth
-		mse = np.zeros(raycast_depth.shape[0])
-		for i in range(raycast_depth.shape[0]):
-			mse[i] = np.mean(np.square(raycast_depth[i] - actual_depth))
+		# mse = np.zeros(raycast_depth.shape[0])
+		# for i in range(raycast_depth.shape[0]):
+		# 	mse[i] = np.mean(np.square(raycast_depth[i] - actual_depth))
 
-		cosine_dist = np.zeros(self.particles.shape[0])
-		for i in range(self.particles.shape[0]):
-			#cosine_dist[i] = np.mean(paired_cosine_distances(actual_normals, raycast_normals[i]))
-			cosine_dist[i] = np.mean( np.square(paired_cosine_distances(actual_normals, raycast_normals[i])) )
-
-
+		# cosine_dist = np.zeros(self.particles.shape[0])
+		# for i in range(self.particles.shape[0]):
+		# 	#cosine_dist[i] = np.mean(paired_cosine_distances(actual_normals, raycast_normals[i]))
+		# 	cosine_dist[i] = np.mean( np.square(paired_cosine_distances(actual_normals, raycast_normals[i])) )
+		# Or perhaps the 35 times faster version i just cooked up:
+		cosine_dist = np.mean(
+			np.square(
+				0.5 * np.square(
+					np.linalg.norm(
+						raycast_normals - actual_normals.reshape(1, actual_normals.shape[0], actual_normals.shape[1]), axis=2
+						)
+					)
+				), axis=1
+			)
 		# Print what order of indexes with the lowest error, ie [100, 69, 52] would mean that the 100th particle has the lowest error, 69th the second lowest and so on
-		best_indicies_depth = np.argsort(error_depth)
-		best_indicies_normal = np.argsort(error_normal)
-		best_indicies_mse = np.argsort(mse)
-		best_indicies_cosine = np.argsort(cosine_dist)
+		# best_indicies_depth = np.argsort(error_depth)
+		# best_indicies_normal = np.argsort(error_normal)
+		# best_indicies_mse = np.argsort(mse)
+		# best_indicies_cosine = np.argsort(cosine_dist)
 
 		# print("Best indicies d: {}".format(best_indicies_depth))
 		# print("Values d: {}".format(error_depth[best_indicies_depth]))
@@ -602,12 +610,12 @@ class Localizer(Node):
 		d_processed = np.power(error_depth, -1)
 		d_processed = d_processed / np.sum(d_processed)
 
-		mse_processed = np.power(mse, -1)
-		mse_processed = mse_processed / np.sum(mse_processed)
+		# mse_processed = np.power(mse, -1)
+		# mse_processed = mse_processed / np.sum(mse_processed)
 
 		#n_processed = np.power(error_normal, 1)
-		n_processed = np.power(error_normal, -1)
-		n_processed = n_processed / np.sum(n_processed)
+		# n_processed = np.power(error_normal, -1)
+		# n_processed = n_processed / np.sum(n_processed)
 
 		cos_processed = np.power(cosine_dist, -1)
 		cos_processed = cos_processed / np.sum(cos_processed)
