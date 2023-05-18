@@ -7,6 +7,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 from scipy.interpolate import CubicSpline, Rbf
 import time
+import pickle
 
 
 
@@ -15,6 +16,21 @@ class MinimalSubscriber(Node):
         super().__init__('minimal_subscriber')
 
 
+        self.waypoints_received = False
+        self.plan_received = False
+        
+        self.odometry_msgs = []
+        self.odometry_received = False
+        self.base_pose_gt_msgs = []
+        self.base_pose_gt_received = False
+        self.rear_pose_gt_msgs = []
+        self.rear_pose_gt_received = False
+        self.cmd_vel_msgs = []
+        self.cmd_vel_received = False
+        self.joint_controller_msgs = []
+        self.joint_controller_received = False
+        
+
         self.setup_subscribers()
 
 
@@ -22,11 +38,6 @@ class MinimalSubscriber(Node):
 
 
     def setup_subscribers(self):
-        self.odometry_subscriber = self.create_subscription(
-            Odometry,
-            'odom',
-            self.odometry_callback,
-            10)
         self.cmd_vel_subscriber = self.create_subscription(
             Twist,
             'cmd_vel',
@@ -40,7 +51,7 @@ class MinimalSubscriber(Node):
         
         self.waypose_subscriber = self.create_subscription(
             PoseArray,
-            'waypose',
+            'wayposes',
             self.waypose_callback,
             10)
         
@@ -49,14 +60,45 @@ class MinimalSubscriber(Node):
             'joint_states_controller',
             self.joint_controller_callback,
             10)
+        
+        self.base_pose_gt_subscriber = self.create_subscription(
+            Odometry,
+            'wagon/base_link_pose_gt',
+            self.base_pose_gt_callback,
+            10)
+        self.rear_pose_gt_subscrier = self.create_subscription(
+            Odometry,
+            'wagon/rear_link_pose_gt',
+            self.rear_pose_gt_callback,
+            10)
+        
+        self.odometry_ekf_subscriber = self.create_subscription(
+            Odometry,
+            'odometry/local',
+            self.odometry_ekf_callback,
+            10)
 
-    def odometry_callback(self, msg):
-        self.odometry = msg
+
+    def odometry_ekf_callback(self, msg):
+        self.odometry_msgs.append(msg)
         self.odometry_received = True
+
+    def base_pose_gt_callback(self, msg):
+        self.base_pose_gt = msg
+        self.base_pose_gt_msgs.append(msg)
+        self.base_pose_gt_received = True
+    
+    def rear_pose_gt_callback(self, msg):
+        self.rear_pose_gt = msg
+        self.rear_pose_gt_msgs.append(msg)
+        self.rear_pose_gt_received = True
+
 
     def cmd_vel_callback(self, msg):
         self.cmd_vel = msg
+        self.cmd_vel_msgs.append(msg)
         self.cmd_vel_received = True
+        self.stop_and_save()
 
     def waypose_callback(self, msg):
         self.waypoints = msg
@@ -64,16 +106,18 @@ class MinimalSubscriber(Node):
 
     def joint_controller_callback(self, msg):
         self.joint_controller = msg
+        self.joint_controller_msgs.append(msg)
         self.joint_controller_received = True
 
     def global_plan_callback(self, msg):
         self.plan = msg
         self.plan_received = True
 
+        
+
     def get_waypoints(self):
         if self.waypoints_received:
             plan = np.array([[pose.position.x, pose.position.y, pose.position.z] for pose in self.waypoints.poses])
-
             return plan
         else:
             return None
@@ -86,6 +130,22 @@ class MinimalSubscriber(Node):
             return plan
         else:
             return None
+
+    def stop_and_save(self, name="island_boy_full_ekf"):
+        if self.cmd_vel.linear.x == 0 and self.cmd_vel.angular.z == 0:
+            with open("/home/daniel/Documents/master/rosbags/pose_data/" + str(name) + ".pkl", "wb") as f:
+                pickle.dump({'base_link_pose_gt' : self.base_pose_gt_msgs,
+                             'rear_link_pose_gt' : self.rear_pose_gt_msgs,
+                             'wayposes' : self.waypoints, 
+                             'global_pln' : self.plan,
+                             'cmd_vel' : self.cmd_vel_msgs, 
+                             'joint_state_controller' : self.joint_controller_msgs, 
+                             'odometry_ekf' : self.odometry_msgs
+                             },  f)
+            print("Saved data")
+            self.destroy_node()
+
+            
 
 def interpolate_points(points, num_points):
             
@@ -170,19 +230,70 @@ def poly_fit_plot(wayposes, fig):
     return fig, ax
     
 
+def scatter_plot(wayposes, fig):
+
+
+    # create a 3D plot
+    ax = fig.add_subplot(111, projection='3d')
+
+    # plot the base poses as red circles
+    # ax.scatter(base_pose[:,0], base_pose[:,1], base_pose[:,2], c='r', marker='o')
+
+    # plot the wayposes as numbered blue triangles
+    ax.scatter(wayposes[:,0], wayposes[:,1], wayposes[:,2], c='b', marker='^')
+    # for i, (x, y, z) in enumerate(zip(base_pose[:,0], base_pose[:,1], base_pose[:,2])):
+    #     if i % 100 == 0:
+    #         ax.text(x, y, z, str(i), color="red", fontsize=12)
+
+    # set the axis labels
+    ax.set_xlabel('X Label')
+    ax.set_ylabel('Y Label')
+    ax.set_zlabel('Z Label')
+
+    # show the plot
+    return fig, ax
+
 
 def main(args=None):
     rclpy.init(args=args)
     data = MinimalSubscriber()
+    print("Waiting for rosbag to start")
+
+
+    try:
+        rclpy.spin(data)
+    except KeyboardInterrupt:
+        print("Keyboard interrupt")
+        return
+    
 
     while data.get_plan() is None:
         rclpy.spin_once(data)
         print("Waiting for plan")
         time.sleep(0.1)
 
+    while data.get_waypoints() is None:
+        rclpy.spin_once(data)
+        print("Waiting for waypoints")
+        time.sleep(0.1)
+
     plan = data.get_plan()
-    interpolate_points(plan, plan.shape[0] * 10)
+    wayposes = data.get_waypoints()
+    points = interpolate_points(plan, plan.shape[0] * 10)
     fig = plt.figure()
-    fig, ax = poly_fit_plot(plan, fig)
+
+    ax = fig.add_subplot(111, projection='3d')
+    #ax.scatter(points[:,0], points[:,1], points[:,2], c='b', marker='^')
+    ax.scatter(plan[:,0], plan[:,1], plan[:,2], c='r', marker='^')
+    ax.scatter(wayposes[:,0], wayposes[:,1], wayposes[:,2], c='g', marker='o')
+
+    ax.set_box_aspect((np.ptp(wayposes[:,0]), np.ptp(wayposes[:,1]), np.ptp(wayposes[:,2])))  # aspect ratio is 1:1:1 in data space
+
+    ax.set_xlabel('X Label')
+    ax.set_ylabel('Y Label')
+    ax.set_zlabel('Z Label')
+
+    # fig, ax = poly_fit_plot(points, fig)
+    # scatter_plot(plan, waypoints)
     plt.show()
     # print(data.get_waypoints())

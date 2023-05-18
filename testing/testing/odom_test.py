@@ -10,7 +10,7 @@ import datetime
 import pickle
 
 A_VEL = -0.5
-F_VEL = 4.0
+F_VEL = 2.0
 
 
 class OdomTest(Node):
@@ -25,8 +25,8 @@ class OdomTest(Node):
 
         self.setup_sub_publisher()
 
-        # self.file_location = "/home/daniel/master_ws/src/Danitech-master/wagon_navigation/wagon_navigation/pose_data/"
-        self.file_location = "/home/danitech/master_ws/src/Danitech-master/wagon_navigation/wagon_navigation/pose_data/"
+        self.file_location = "/home/daniel/master_ws/src/Danitech-master/wagon_navigation/wagon_navigation/pose_data/"
+        # self.file_location = "/home/danitech/master_ws/src/Danitech-master/wagon_navigation/wagon_navigation/pose_data/"
 
         #Check if file location exists
         if not os.path.exists(self.file_location):
@@ -192,28 +192,33 @@ def main(args=None):
 
     go_to_speed(odom_test, F_VEL)
 
-
-    # For 10 seconds pub cmd vel
-    for i in range(40):
-        odom_test.pub_cmd_vel(F_VEL, A_VEL)
-        rclpy.spin_once(odom_test)
-        time.sleep(0.1)
-
-    for i in range(50):
+    for i in range(100):
         odom_test.pub_cmd_vel(F_VEL, 0.0)
         rclpy.spin_once(odom_test)
         time.sleep(0.1)
 
 
-    for i in range(40):
-        odom_test.pub_cmd_vel(F_VEL, -A_VEL)
-        rclpy.spin_once(odom_test)
-        time.sleep(0.1)
+    # For 10 seconds pub cmd vel
+    # for i in range(40):
+    #     odom_test.pub_cmd_vel(F_VEL, A_VEL)
+    #     rclpy.spin_once(odom_test)
+    #     time.sleep(0.1)
 
-    for i in range(20):
-            odom_test.pub_cmd_vel(F_VEL, 0.0)
-            rclpy.spin_once(odom_test)
-            time.sleep(0.1)
+    # for i in range(50):
+    #     odom_test.pub_cmd_vel(F_VEL, 0.0)
+    #     rclpy.spin_once(odom_test)
+    #     time.sleep(0.1)
+
+
+    # for i in range(40):
+    #     odom_test.pub_cmd_vel(F_VEL, -A_VEL)
+    #     rclpy.spin_once(odom_test)
+    #     time.sleep(0.1)
+
+    # for i in range(20):
+    #         odom_test.pub_cmd_vel(F_VEL, 0.0)
+    #         rclpy.spin_once(odom_test)
+    #         time.sleep(0.1)
 
 
 
