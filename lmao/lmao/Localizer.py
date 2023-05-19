@@ -41,8 +41,11 @@ from tf2_ros.transform_broadcaster import TransformBroadcaster
 
 import pickle
 
+print("Localizer ln 44")
+
 all_positions = []
-filename = "/home/junge/master_ws/src/Danitech-master/lmao/lmao/localizer_positions2.pkl"
+
+print("Localizer ln 48")
 
 #Import cv2
 import cv2
@@ -57,14 +60,19 @@ cv2.namedWindow("Probabilities", cv2.WINDOW_NORMAL)
 cv2.namedWindow("Lidar", cv2.WINDOW_NORMAL)
 cv2.namedWindow("Dummy Lidar", cv2.WINDOW_NORMAL)
 
+print("Localizer ln 60")
 
 class Localizer(Node):
-	def __init__(self):
+	def __init__(self, ros=True, fname=None):
+		super().__init__('localizer')
+		print("Localizer ln 60")
+		self.filename = fname
 		np.seterr(divide='ignore')
 		np.seterr(invalid='ignore')
 		# Init node
-		super().__init__('localizer')
 		self.get_logger().info("Localizer node started")
+
+		self.ros = ros
 
 		# Declare parameters
 		from rcl_interfaces.msg import ParameterDescriptor
@@ -85,18 +93,21 @@ class Localizer(Node):
 		self.world_frame = self.get_parameter("world_frame").value
 		self.odom_topic = self.get_parameter("odom_topic").value
 
-		# Create tf2 buffer and listener
-		self.tf_buffer = Buffer()
-		self.tf_listener = TransformListener(self.tf_buffer, self)
-		self.tf_broadcaster = TransformBroadcaster(self)
-		
-		# Create publisher
-		self.odom_pub = self.create_publisher(Odometry, self.odom_topic, 10)
-		self.get_logger().info("Publishing odometry data to topic: {}".format(self.odom_topic))
+		print("Localizer ln 90")
 
-		# Create the subscriber
-		self.create_subscription(PointCloud2, self.lidar_topic, self.lidar_callback, 10)
-		self.get_logger().info("Subscribed to topic: {}".format(self.lidar_topic))
+		if ros:
+			# Create tf2 buffer and listener
+			self.tf_buffer = Buffer()
+			self.tf_listener = TransformListener(self.tf_buffer, self)
+			self.tf_broadcaster = TransformBroadcaster(self)
+			
+			# Create publisher
+			self.odom_pub = self.create_publisher(Odometry, self.odom_topic, 10)
+			self.get_logger().info("Publishing odometry data to topic: {}".format(self.odom_topic))
+
+			# Create the subscriber
+			self.create_subscription(PointCloud2, self.lidar_topic, self.lidar_callback, 10)
+			self.get_logger().info("Subscribed to topic: {}".format(self.lidar_topic))
 		
 		# Load map
 		self.world = World.World(self.map_path)
@@ -137,12 +148,13 @@ class Localizer(Node):
 		self.render_option = self.viz.get_render_option()
 		self.render_option.point_show_normal = True
 
-		# Create timer to update the visualization every 0.1 seconds
-		self.viz_timer = self.create_timer(0.2, self.viz_loop)
+		if ros:
+			# Create timer to update the visualization every 0.1 seconds
+			self.viz_timer = self.create_timer(0.2, self.viz_loop)
 
-		# Subscribe to the odometry topic
-		self.create_subscription(Odometry, self.odom_topic, self.odom_callback, 10)
-		self.get_logger().info("Subscribed to topic: {}".format(self.odom_topic))
+			# Subscribe to the odometry topic
+			self.create_subscription(Odometry, self.odom_topic, self.odom_callback, 10)
+			self.get_logger().info("Subscribed to topic: {}".format(self.odom_topic))
 		self.stamp = None
 
 		self.particle_learning_rate = 0.05
@@ -153,8 +165,11 @@ class Localizer(Node):
 
 		self.counter = 0
 
-		# Subscribe to cmd_vel for file saving
-		self.create_subscription(Twist, "/cmd_vel", self.cmd_vel_callback, 10)
+		if ros:
+			# Subscribe to cmd_vel for file saving
+			self.create_subscription(Twist, "/cmd_vel", self.cmd_vel_callback, 10)
+
+		print("Localizer initialized")
 
 
 	def cmd_vel_callback(self, msg):
@@ -162,9 +177,11 @@ class Localizer(Node):
 		if msg.linear.x == 0:
 			# Print available info about all_positions
 			print("Length of all_positions: {}".format(len(all_positions)))
-			with open(filename, "wb") as f:
-				pickle.dump(all_positions, f)
-			self.get_logger().info("Saved positions to file: {}".format(filename))
+			if self.filename is not None:
+				with open(self.filename, "wb") as f:
+					pickle.dump(all_positions, f)
+					# Dict of positions and times
+				self.get_logger().info("Saved positions to file: {}".format(self.filename))
 			exit()
 
 
@@ -190,7 +207,7 @@ class Localizer(Node):
 			pcd.points = o3d.utility.Vector3dVector(self.particles[:,:3])
 			pcd.normals = o3d.utility.Vector3dVector(dir_vecs)
 			pcd.paint_uniform_color([0, 0, 1])
-			o3d.visualization.draw_geometries([pcd, self.world.world], point_show_normal=True)
+			#o3d.visualization.draw_geometries([pcd, self.world.world], point_show_normal=True)
 
 
 
@@ -330,7 +347,8 @@ class Localizer(Node):
 	def resample_particles(self):
 		avg_pos, avg_rot = self.get_centroid()
 		if self.clock is not None:
-			self.send_transform(avg_pos, avg_rot)
+			if self.ros:
+				self.send_transform(avg_pos, avg_rot)
 			baselink_avg_pos = avg_pos + avg_rot.apply([0, 0, -1])
 			all_positions.append([baselink_avg_pos, avg_rot.as_quat(), self.clock.sec + self.clock.nanosec * 1e-9])
 
