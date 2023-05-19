@@ -36,7 +36,9 @@ class global_planner():
 
         # self.valid_points[self.vertex_normals[:, 2] < 0.8] = 0
 
-        self.start_stop_chooser(self.mesh_map)
+        # self.start_stop_chooser(self.mesh_map)
+        self.points = np.array([127230, 335972, 517676, 38824])
+
         #self.destroy_subscription(pose_subscriber)
         #self.points = np.array([50970, 558829])
 
@@ -559,8 +561,8 @@ class ros_planner(Node):
 
 def main():
     # global_planner("/home/daniel/Documents/master/isaac_map.ply", "/home/daniel/Documents/master/valid_points.npy")
-    # planner =  global_planner("/home/daniel/Documents/master/maps/easter_island_boy.ply", "/home/daniel/Documents/master/maps/island_boy_valid_points_0.85_1.5.npy")
-    planner =  global_planner("/home/daniel/Documents/master/maps/quarray_map.ply", "/home/daniel/Documents/master/quarrayvalid_points_0.9_2.npy")
+    planner =  global_planner("/home/daniel/Documents/master/maps/easter_island_boy.ply", "/home/daniel/Documents/master/maps/island_boy_valid_points_0.85_1.5.npy")
+    # planner =  global_planner("/home/daniel/Documents/master/maps/quarray_map.ply", "/home/daniel/Documents/master/quarrayvalid_points_0.9_2.npy")
     # planner =  global_planner("/home/daniel/Documents/master/maps/quarray_map.ply", "/home/daniel/Documents/master/valid_points_0.8_2.npy")
     # planner = global_planner("/home/danitech/Documents/maps/easter_island_boy.ply", "/home/danitech/Documents/maps/island_boy_valid_points_0.85_1.5.npy")
     #planner = global_planner("/home/danitech/master_ws/src/Danitech-master/wagon_navigation/wagon_navigation/pose_data/isaac_map.ply", "/home/danitech/master_ws/src/Danitech-master/wagon_navigation/wagon_navigation/pose_data/valid_points_0.8_2.npy")
