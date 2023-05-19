@@ -36,8 +36,8 @@ class global_planner():
 
         # self.valid_points[self.vertex_normals[:, 2] < 0.8] = 0
 
-        # self.start_stop_chooser(self.mesh_map)
-        self.points = np.array([127230, 335972, 517676, 38824])
+        self.start_stop_chooser(self.mesh_map)
+        # self.points = np.array([127230, 335972, 517676, 38824])
 
         #self.destroy_subscription(pose_subscriber)
         #self.points = np.array([50970, 558829])
@@ -314,7 +314,7 @@ class global_planner():
         # colors[self.valid_points == 0] = [0.1, 0.1, 0]
 
         colors[:] = [0.5, 0.5, 0.5]
-        colors[index] = self.vertex_normals[index] * [0.7, 0.7, 0.2] + 0.5
+        #colors[index] = self.vertex_normals[index] * [0.7, 0.7, 0.2] + 0.5
 
         # for i in range(colors.shape[0]):
         #     if i in index:
@@ -561,7 +561,7 @@ class ros_planner(Node):
 
 def main():
     # global_planner("/home/daniel/Documents/master/isaac_map.ply", "/home/daniel/Documents/master/valid_points.npy")
-    planner =  global_planner("/home/daniel/Documents/master/maps/easter_island_boy.ply", "/home/daniel/Documents/master/maps/island_boy_valid_points_0.85_1.5.npy")
+    planner =  global_planner("/home/daniel/Documents/master/maps/island_boy2.ply", "/home/daniel/Documents/master/maps/island_boy_valid_points_0.85_1.5.npy")
     # planner =  global_planner("/home/daniel/Documents/master/maps/quarray_map.ply", "/home/daniel/Documents/master/quarrayvalid_points_0.9_2.npy")
     # planner =  global_planner("/home/daniel/Documents/master/maps/quarray_map.ply", "/home/daniel/Documents/master/valid_points_0.8_2.npy")
     # planner = global_planner("/home/danitech/Documents/maps/easter_island_boy.ply", "/home/danitech/Documents/maps/island_boy_valid_points_0.85_1.5.npy")

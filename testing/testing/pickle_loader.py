@@ -106,7 +106,8 @@ def main():
 	waypoints = get_pose_array(data, "wayposes")
 	plan = get_pose_array(data, "global_pln")
 	cmd_vel = get_twist_data(data, "cmd_vel")
-	joint_states = get_joint_states(data, "joint_state_controller")
+	joint_states_controller = get_joint_states(data, "joint_state_controller")
+	joint_states = get_joint_states(data, "joint_states")
 	odometry_ekf = get_odom_data(data, "odometry_ekf")
 	
 
