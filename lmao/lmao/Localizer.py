@@ -25,6 +25,7 @@ from rclpy.node import Node
 from sensor_msgs.msg import PointCloud2
 from rclpy.executors import MultiThreadedExecutor
 from rclpy.callback_groups import MutuallyExclusiveCallbackGroup
+from geometry_msgs.msg import Twist
 
 # Import odometry message
 from nav_msgs.msg import Odometry
@@ -37,6 +38,11 @@ from tf2_ros import TransformException
 from tf2_ros.buffer import Buffer
 from tf2_ros.transform_listener import TransformListener
 from tf2_ros.transform_broadcaster import TransformBroadcaster
+
+import pickle
+
+all_positions = []
+filename = "/home/junge/master_ws/src/Danitech-master/lmao/lmao/localizer_positions2.pkl"
 
 #Import cv2
 import cv2
@@ -62,13 +68,14 @@ class Localizer(Node):
 
 		# Declare parameters
 		from rcl_interfaces.msg import ParameterDescriptor
-		self.declare_parameter('map_path', '/home/junge/Documents/mesh_map/easter_island_boy.ply', ParameterDescriptor(description="Path to the map file"))
+		self.declare_parameter('map_path', '/home/junge/Documents/mesh_map/island_boy2.ply', ParameterDescriptor(description="Path to the map file"))
 		#self.declare_parameter('map_path', "/home/danitech/Documents/maps/easter_island_boy.ply", ParameterDescriptor(description="Path to the map file"))
 		self.declare_parameter('lidar_topic', "/wagon/base_scan/lidar_data", ParameterDescriptor(description="Topic to subscribe to for lidar data"))
 		self.declare_parameter('max_range', 90000, ParameterDescriptor(description="Maximum range of the lidar in mm"))
 		self.declare_parameter('min_range', 2300, ParameterDescriptor(description="Minimum range of the lidar in mm"))
 		self.declare_parameter("world_frame", "world", ParameterDescriptor(description="The world frame (origin of the map)"))
 		self.declare_parameter("odom_topic", "/wagon/base_link_odom_gt", ParameterDescriptor(description="Topic where odometry data is published"))
+		#self.declare_parameter("odom_topic", "/odometry/local", ParameterDescriptor(description="Topic where odometry data is published"))
 
 		# Get parameters
 		self.map_path = self.get_parameter("map_path").value
@@ -102,7 +109,12 @@ class Localizer(Node):
 		self.get_logger().info("Created lidar object")
 
 		# Create particles
-		self.init_particles(1000, visualize=False)
+		#self.init_particles(500, visualize=False)
+		rpy_guess = [0, 0, 0]
+		xyz_guess = np.array([0, 0, 1.3])
+		xyz_std = [0.8, 0.8, 0.1]
+		rpy_std = [0.1, 0.1, 0.15]
+		self.init_particles_from_guess( 500, xyz_guess, rpy_guess, xyz_std, rpy_std, visualize=True)
 
 		self.viz = o3d.visualization.Visualizer()
 		self.viz.create_window()
@@ -120,13 +132,13 @@ class Localizer(Node):
 		self.particle_pcd.points = o3d.utility.Vector3dVector(self.particles[:, :3])
 		dir_vecs = self.rotations.apply(np.array([[1, 0, 0]]))
 		self.particle_pcd.normals = o3d.utility.Vector3dVector(dir_vecs)
-		self.viz.add_geometry(self.particle_pcd)
+		#self.viz.add_geometry(self.particle_pcd)
 		self.viz.add_geometry(self.average_pcd)
 		self.render_option = self.viz.get_render_option()
 		self.render_option.point_show_normal = True
 
 		# Create timer to update the visualization every 0.1 seconds
-		self.viz_timer = self.create_timer(0.1, self.viz_loop)
+		self.viz_timer = self.create_timer(0.2, self.viz_loop)
 
 		# Subscribe to the odometry topic
 		self.create_subscription(Odometry, self.odom_topic, self.odom_callback, 10)
@@ -141,6 +153,47 @@ class Localizer(Node):
 
 		self.counter = 0
 
+		# Subscribe to cmd_vel for file saving
+		self.create_subscription(Twist, "/cmd_vel", self.cmd_vel_callback, 10)
+
+
+	def cmd_vel_callback(self, msg):
+		# If the linear velocity is 0, save the positions to filename
+		if msg.linear.x == 0:
+			# Print available info about all_positions
+			print("Length of all_positions: {}".format(len(all_positions)))
+			with open(filename, "wb") as f:
+				pickle.dump(all_positions, f)
+			self.get_logger().info("Saved positions to file: {}".format(filename))
+			exit()
+
+
+	def init_particles_from_guess(self, n, guess_trans, guess_rpy, trans_std=[0.1,0.1,0.1], rpy_std=[0.1,0.1,0.1], visualize=False):
+		self.n_particles = n
+		self.particles = np.zeros((self.n_particles, 7))
+		# Create random particles using the guess
+		self.particles[:,0] = np.random.normal(guess_trans[0], trans_std[0], self.n_particles)
+		self.particles[:,1] = np.random.normal(guess_trans[1], trans_std[1], self.n_particles)
+		self.particles[:,2] = np.random.normal(guess_trans[0], trans_std[0], self.n_particles)
+		roll = np.random.normal(guess_rpy[0], rpy_std[0], self.n_particles)
+		pitch = np.random.normal(guess_rpy[1], rpy_std[1], self.n_particles)
+		yaw = np.random.normal(guess_rpy[2], rpy_std[2], self.n_particles)
+		# Convert the particles to quaternions
+		self.rotations = R.from_euler("xyz", np.vstack((roll, pitch, yaw)).T)
+		self.probabilities = np.ones(self.n_particles)/self.n_particles
+		if visualize:
+			# Convert quats to a direction vector, by rotating [1, 0, 0]
+			dir_vecs = self.rotations.apply([1, 0, 0])
+
+			# Create pcd from the particles
+			pcd = o3d.geometry.PointCloud()
+			pcd.points = o3d.utility.Vector3dVector(self.particles[:,:3])
+			pcd.normals = o3d.utility.Vector3dVector(dir_vecs)
+			pcd.paint_uniform_color([0, 0, 1])
+			o3d.visualization.draw_geometries([pcd, self.world.world], point_show_normal=True)
+
+
+
 	def viz_loop(self):
 		self.particle_pcd.points = o3d.utility.Vector3dVector(self.particles[:, :3])
 		dir_vecs = self.rotations.apply(np.array([[1, 0, 0]]))
@@ -150,48 +203,51 @@ class Localizer(Node):
 		colors[:, 0] = 1 - (self.probabilities / np.max(self.probabilities))
 		self.particle_pcd.colors = o3d.utility.Vector3dVector(colors)
 
-		if self.clock is None:
-			return
+		
 
 		avg_pos, avg_rot = self.get_centroid()
 
 		# Get transform from base_scan to odom. This is the transform from the lidar to the odom zero
-		try:
-			t = self.tf_buffer.lookup_transform("base_scan", "odom", self.clock)
-		except TransformException as e:
-			self.get_logger().error("Transform error: {}, when transforming from {} to {}".format(e, "base_scan", "odom"))
-			return
-		
-		BS2O = np.eye(4)
-		BS2O[:3, :3] = R.from_quat([t.transform.rotation.x, t.transform.rotation.y, t.transform.rotation.z, t.transform.rotation.w]).as_matrix()
-		BS2O[:3, 3] = [t.transform.translation.x, t.transform.translation.y, t.transform.translation.z]
+		# try:
+		# 	if self.clock is not None:
+		# 		t = self.tf_buffer.lookup_transform("base_scan", "odom", self.clock)
+		# 		BS2O = np.eye(4)
+		# 		BS2O[:3, :3] = R.from_quat([t.transform.rotation.x, t.transform.rotation.y, t.transform.rotation.z, t.transform.rotation.w]).as_matrix()
+		# 		BS2O[:3, 3] = [t.transform.translation.x, t.transform.translation.y, t.transform.translation.z]
 
-		# Create transformation matrix of avg_pos and avg_rot
-		M2BS = np.eye(4)
-		M2BS[:3, :3] = avg_rot.as_matrix()
-		M2BS[:3, 3] = avg_pos
-		
+		# 		# Create transformation matrix of avg_pos and avg_rot
+		# 		M2BS = np.eye(4)
+		# 		M2BS[:3, :3] = avg_rot.as_matrix()
+		# 		M2BS[:3, 3] = avg_pos
+				
 
-		# Calculate the combined transform from map to odom
-		M2O = np.matmul(BS2O, M2BS)
+		# 		# Calculate the combined transform from map to odom
+		# 		M2O = np.matmul(BS2O, M2BS)
 
-		# Create TransformStamped of W2O
-		M2O_msg = TransformStamped()
-		M2O_msg.header.stamp = self.clock
-		M2O_msg.header.frame_id = "map"
-		M2O_msg.child_frame_id = "odom"
-		M2O_msg.transform.translation.x = M2O[0, 3]
-		M2O_msg.transform.translation.y = M2O[1, 3]
-		M2O_msg.transform.translation.z = M2O[2, 3]
-		quat = R.from_matrix(M2O[:3, :3]).as_quat()
-		M2O_msg.transform.rotation.x = quat[0]
-		M2O_msg.transform.rotation.y = quat[1]
-		M2O_msg.transform.rotation.z = quat[2]
-		M2O_msg.transform.rotation.w = quat[3]
-		
-		# Publish the transform
-		self.tf_broadcaster.sendTransform(M2O_msg)
-		self.get_logger().info("Published transform from map to odom")
+		# 		# Create TransformStamped of W2O
+		# 		M2O_msg = TransformStamped()
+		# 		M2O_msg.header.stamp = self.clock
+		# 		M2O_msg.header.frame_id = "map"
+		# 		M2O_msg.child_frame_id = "odom"
+		# 		M2O_msg.transform.translation.x = M2O[0, 3]
+		# 		M2O_msg.transform.translation.y = M2O[1, 3]
+		# 		M2O_msg.transform.translation.z = M2O[2, 3]
+		# 		quat = R.from_matrix(M2O[:3, :3]).as_quat()
+		# 		M2O_msg.transform.rotation.x = quat[0]
+		# 		M2O_msg.transform.rotation.y = quat[1]
+		# 		M2O_msg.transform.rotation.z = quat[2]
+		# 		M2O_msg.transform.rotation.w = quat[3]
+				
+		# 		# Publish the transform
+		# 		self.tf_broadcaster.sendTransform(M2O_msg)
+		# 		self.get_logger().info("Published transform from map to odom")
+		# except TransformException as e:
+		# 	self.get_logger().error("Transform error: {}, when transforming from {} to {}".format(e, "base_scan", "odom"))
+
+		#if self.clock is not None:
+		#	self.send_transform(avg_pos, avg_rot)
+		#	baselink_avg_pos = avg_pos + avg_rot.apply([0, 0, -1])
+		#	all_positions.append([baselink_avg_pos, avg_rot.as_quat(), self.clock.sec + self.clock.nanosec * 1e-9])
 
 		#self.send_transform(avg_pos, avg_rot)
 		self.average_pcd.points = o3d.utility.Vector3dVector(np.array([avg_pos]))
@@ -208,20 +264,14 @@ class Localizer(Node):
 	def send_transform(self, translation, rotation):
 		t = TransformStamped()
 		t.header.stamp = self.clock
-		t.header.frame_id = "base_link"
-		t.child_frame_id = "map"
-
-		# Create transformation matrix
-		transform = np.eye(4)
-		transform[:3, :3] = rotation.as_matrix()
-		transform[:3, 3] = translation
-		# Compute inverse transformation
-		transform = np.linalg.inv(transform)
+		t.header.frame_id = "world"
+		t.child_frame_id = "localized_base_link"
 		# Extract inverse translation and rotation
-		t.transform.translation.x = transform[0, 3]
-		t.transform.translation.y = transform[1, 3]
-		t.transform.translation.z = transform[2, 3]
-		quat = R.from_matrix(transform[:3, :3]).as_quat()
+		trans = translation + rotation.apply([0, 0, -1]) # Offset for lidar
+		t.transform.translation.x = trans[0]
+		t.transform.translation.y = trans[1]
+		t.transform.translation.z = trans[2]
+		quat = rotation.as_quat()
 		t.transform.rotation.x = quat[0]
 		t.transform.rotation.y = quat[1]
 		t.transform.rotation.z = quat[2]
@@ -244,8 +294,8 @@ class Localizer(Node):
 		angular = np.array([msg.twist.twist.angular.x, msg.twist.twist.angular.y, msg.twist.twist.angular.z]) * dt
 		# Apply twist to particles
 		for i, r in enumerate(self.rotations):
-			if i == 0:
-				continue
+			# if i == 0:
+			# 	continue
 			self.particles[i, :3] += r.apply(linear)
 			ang = r.apply(angular)
 			# Concatenate rotation and ang
@@ -264,20 +314,26 @@ class Localizer(Node):
 		linear = np.array([msg.twist.twist.linear.x, msg.twist.twist.linear.y, msg.twist.twist.linear.z]) * dt
 		angular = np.array([msg.twist.twist.angular.x, msg.twist.twist.angular.y, msg.twist.twist.angular.z]) * dt
 		# Apply twist to particles
+		ang = R.from_euler("xyz", angular)
 		for i, r in enumerate(self.rotations):
-			if i == 0:
-				continue
+			# if i == 0:
+			# 	continue
 			self.particles[i, :3] += linear
 			# Angular is the twist in the body frame.
 			# We need to rotate it to the world frame
 			# before applying it to the particles
-			ang = R.from_euler("xyz", angular)
 			self.rotations[i] = self.rotations[i] * ang
 		return
 
 
 
 	def resample_particles(self):
+		avg_pos, avg_rot = self.get_centroid()
+		if self.clock is not None:
+			self.send_transform(avg_pos, avg_rot)
+			baselink_avg_pos = avg_pos + avg_rot.apply([0, 0, -1])
+			all_positions.append([baselink_avg_pos, avg_rot.as_quat(), self.clock.sec + self.clock.nanosec * 1e-9])
+
 		# Normalize probabilities
 		# self.probabilities = self.probabilities / np.sum(self.probabilities)
 		# Keep self.particles_to_keep of the particles
@@ -395,6 +451,7 @@ class Localizer(Node):
 
 
 	def init_particles(self, n, visualize=False):
+		self.world.prep_world_for_random()
 		# Create particles
 		self.n_particles = n
 		self.particles = self.world.get_probable_random_points(self.n_particles)
@@ -449,6 +506,8 @@ class Localizer(Node):
 		# Get the normals
 		normals = get_normals(xyz)
 
+		depth_mask = depth > self.max_range
+		normals[depth_mask[:, :, 0]] = 0
 
 		if VIRTUAL_PLAYBACK == True:
 			# Attempt to get transform at time of message, otherwise get most recent
@@ -479,12 +538,17 @@ class Localizer(Node):
 			rays += [translation[0], translation[1], translation[2], 0, 0, 0]
 
 			raycast = self.world.cast_rays(rays)
+			
 
 			vdepth = raycast['t_hit'].numpy()
 			vnormals = raycast['primitive_normals'].numpy()
 
+			r_xd = R.from_quat(rotation)
+
+			vnormals = r_xd.apply(vnormals.reshape(-1, 3)).reshape(vnormals.shape)
+
 			# Show normals as 2d image in opencv that updates as new data comes in
-			vnormals[depth_mask[:, :, 0]] = 0
+			#vnormals[depth_mask[:, :, 0]] = 0
 			cv2.imshow("Virtual normals", abs(vnormals))
 			cv2.waitKey(1)
 
@@ -504,8 +568,6 @@ class Localizer(Node):
 		cv2.imshow("Normals", abs(normals))
 		cv2.waitKey(1)
 		# Get indices of depth < self.max_range
-		depth_mask = depth > self.max_range
-		normals[depth_mask[:, :, 0]] = 0
 		# print("Depth mash shape: {}".format(depth_mask.shape))
 		# print("Normals shape: {}".format(normals.shape))
 
@@ -714,7 +776,7 @@ class Localizer(Node):
 		depth_gradient[np.isinf(depth_gradient)] = max_gradient
 		depth_gradient[np.isnan(depth_gradient)] = max_gradient
 
-		depth_gradient = 1/(10+depth_gradient)
+		depth_gradient = 1/(5+depth_gradient)
 		
 		depth_gradient[rows, cols] = 0
 
