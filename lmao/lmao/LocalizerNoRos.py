@@ -27,10 +27,12 @@ def main(args=None):
 
 			try:
 
+				print("Starting test with " + str(i) + " rays and " + str(j) + " particles")
+
 				localizer = Localizer(ros=False, n_rays=i, n_particles=j, fname=(test_file_loc + str(i) + "rays_" + str(j) + "particles.pkl"))
 				bag_file = "/home/danitech/Documents/bags/island_boy_to_rule_them_all" #QFileDialog.getExistingDirectory(QWidget, 'Open file', "/home/junge/Documents/bags/island_boy_to_rule_them_all")
 
-				time = 0
+				time0 = 0
 
 				t0 = time.time()
 
@@ -47,9 +49,9 @@ def main(args=None):
 							msg = deserialize_cdr(rawdata, connection.msgtype)
 
 							time1 = msg.header.stamp.sec + msg.header.stamp.nanosec * 1e-9
-							if time1 - time > 1:
+							if time1 - time0 > 1:
 								print(time1)
-								time = time1
+								time0 = time1
 							localizer.odom_callback(msg)
 						elif connection.topic == "/cmd_vel":
 							msg = deserialize_cdr(rawdata, connection.msgtype)
