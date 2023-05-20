@@ -61,6 +61,7 @@ cv2.namedWindow("Dummy Lidar", cv2.WINDOW_NORMAL)
 
 class Localizer(Node):
 	def __init__(self, ros=True, n_rays=1000, n_particles=500, fname=None):
+		print("Localizer initialized with {} rays and {} particles".format(n_rays, n_particles))
 		super().__init__('localizer')
 		self.filename = fname
 		np.seterr(divide='ignore')
