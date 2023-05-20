@@ -6,16 +6,9 @@ import lmao_lib.world as World
 import lmao_lib.util.pclmao as pclmao
 from lmao_lib.mapping import get_normals
 
-import os
-
 from scipy.spatial.transform import Rotation as R
-import scipy.ndimage as ndimage
 from sklearn.metrics.pairwise import paired_cosine_distances
 
-
-from multiprocessing import Process, Queue
-
-import threading
  
 import time
 
@@ -23,8 +16,6 @@ import time
 import rclpy
 from rclpy.node import Node
 from sensor_msgs.msg import PointCloud2
-from rclpy.executors import MultiThreadedExecutor
-from rclpy.callback_groups import MutuallyExclusiveCallbackGroup
 from geometry_msgs.msg import Twist
 
 # Import odometry message
@@ -41,7 +32,7 @@ from tf2_ros.transform_broadcaster import TransformBroadcaster
 
 import pickle
 
-all_positions = []
+
 
 
 #Import cv2
@@ -51,28 +42,30 @@ SAVEFIGS = False
 VIRTUAL_PLAYBACK = False
 
 # Create window for cv2
-cv2.namedWindow("Normals", cv2.WINDOW_NORMAL)
-cv2.namedWindow("Virtual normals", cv2.WINDOW_NORMAL)
-cv2.namedWindow("Probabilities", cv2.WINDOW_NORMAL)
-cv2.namedWindow("Lidar", cv2.WINDOW_NORMAL)
-cv2.namedWindow("Dummy Lidar", cv2.WINDOW_NORMAL)
+#cv2.namedWindow("Normals", cv2.WINDOW_NORMAL)
+#cv2.namedWindow("Virtual normals", cv2.WINDOW_NORMAL)
+#cv2.namedWindow("Probabilities", cv2.WINDOW_NORMAL)
+#cv2.namedWindow("Lidar", cv2.WINDOW_NORMAL)
+#cv2.namedWindow("Dummy Lidar", cv2.WINDOW_NORMAL)
 
 
 
 class Localizer(Node):
-	def __init__(self, ros=True, n_rays=1000, n_particles=500, fname=None):
+	def __init__(self, ros=True, n_rays=1000, n_particles=500, fname=None, nname="John"):
 		print("Localizer initialized with {} rays and {} particles".format(n_rays, n_particles))
-		super().__init__('localizer')
+		super().__init__(nname)
 		self.filename = fname
 		np.seterr(divide='ignore')
 		np.seterr(invalid='ignore')
 		self.ros = ros
 		self.n_rays = n_rays
 
+		self.all_positions = []
+
 		# Declare parameters
 		from rcl_interfaces.msg import ParameterDescriptor
-		#self.declare_parameter('map_path', '/home/junge/Documents/mesh_map/island_boy2.ply', ParameterDescriptor(description="Path to the map file"))
-		self.declare_parameter('map_path', "/home/danitech/Documents/maps/island_boy2.ply", ParameterDescriptor(description="Path to the map file"))
+		self.declare_parameter('map_path', '/home/junge/Documents/mesh_map/island_boy2.ply', ParameterDescriptor(description="Path to the map file"))
+		#self.declare_parameter('map_path', "/home/danitech/Documents/maps/island_boy2.ply", ParameterDescriptor(description="Path to the map file"))
 		self.declare_parameter('lidar_topic', "/wagon/base_scan/lidar_data", ParameterDescriptor(description="Topic to subscribe to for lidar data"))
 		self.declare_parameter('max_range', 90000, ParameterDescriptor(description="Maximum range of the lidar in mm"))
 		self.declare_parameter('min_range', 2300, ParameterDescriptor(description="Minimum range of the lidar in mm"))
@@ -127,13 +120,10 @@ class Localizer(Node):
 		#self.viz.update_geometry()
 		#self.viz.poll_events()
 		#self.viz.update_renderer()
-
 		self.particle_pcd = o3d.geometry.PointCloud()
 		self.average_pcd = o3d.geometry.PointCloud()
 		# self.mesh_average_arrow = o3d.geometry.TriangleMesh()
 		# self.mesh_average_arrow = self.mesh_average_arrow.create_arrow(1.0, 1.5, 5.0, 4.0, 20, 4, 1)
-
-
 		self.particle_pcd.points = o3d.utility.Vector3dVector(self.particles[:, :3])
 		dir_vecs = self.rotations.apply(np.array([[1, 0, 0]]))
 		self.particle_pcd.normals = o3d.utility.Vector3dVector(dir_vecs)
@@ -170,12 +160,13 @@ class Localizer(Node):
 		# If the linear velocity is 0, save the positions to filename
 		if msg.linear.x == 0:
 			# Print available info about all_positions
-			print("Length of all_positions: {}".format(len(all_positions)))
+			print("Length of all_positions: {}".format(len(self.all_positions)))
 			if self.filename is not None:
 				with open(self.filename, "wb") as f:
-					pickle.dump(all_positions, f)
+					pickle.dump(self.all_positions, f)
 					# Dict of positions and times
 				self.get_logger().info("Saved positions to file: {}".format(self.filename))
+				self.viz.destroy_window()
 			return False
 		return True
 
@@ -345,7 +336,7 @@ class Localizer(Node):
 			if self.ros:
 				self.send_transform(avg_pos, avg_rot)
 			baselink_avg_pos = avg_pos + avg_rot.apply([0, 0, -1])
-			all_positions.append([baselink_avg_pos, avg_rot.as_quat(), self.clock.sec + self.clock.nanosec * 1e-9])
+			self.all_positions.append([baselink_avg_pos, avg_rot.as_quat(), self.clock.sec + self.clock.nanosec * 1e-9])
 
 		# Normalize probabilities
 		# self.probabilities = self.probabilities / np.sum(self.probabilities)
