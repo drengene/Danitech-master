@@ -70,8 +70,8 @@ class Localizer(Node):
 
 		# Declare parameters
 		from rcl_interfaces.msg import ParameterDescriptor
-		self.declare_parameter('map_path', '/home/junge/Documents/mesh_map/island_boy2.ply', ParameterDescriptor(description="Path to the map file"))
-		#self.declare_parameter('map_path', "/home/danitech/Documents/maps/easter_island_boy.ply", ParameterDescriptor(description="Path to the map file"))
+		#self.declare_parameter('map_path', '/home/junge/Documents/mesh_map/island_boy2.ply', ParameterDescriptor(description="Path to the map file"))
+		self.declare_parameter('map_path', "/home/danitech/Documents/maps/island_boy2.ply", ParameterDescriptor(description="Path to the map file"))
 		self.declare_parameter('lidar_topic', "/wagon/base_scan/lidar_data", ParameterDescriptor(description="Topic to subscribe to for lidar data"))
 		self.declare_parameter('max_range', 90000, ParameterDescriptor(description="Maximum range of the lidar in mm"))
 		self.declare_parameter('min_range', 2300, ParameterDescriptor(description="Minimum range of the lidar in mm"))
