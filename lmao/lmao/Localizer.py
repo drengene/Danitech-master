@@ -41,11 +41,8 @@ from tf2_ros.transform_broadcaster import TransformBroadcaster
 
 import pickle
 
-print("Localizer ln 44")
-
 all_positions = []
 
-print("Localizer ln 48")
 
 #Import cv2
 import cv2
@@ -60,19 +57,16 @@ cv2.namedWindow("Probabilities", cv2.WINDOW_NORMAL)
 cv2.namedWindow("Lidar", cv2.WINDOW_NORMAL)
 cv2.namedWindow("Dummy Lidar", cv2.WINDOW_NORMAL)
 
-print("Localizer ln 60")
+
 
 class Localizer(Node):
-	def __init__(self, ros=True, fname=None):
+	def __init__(self, ros=True, n_rays=1000, n_particles=500, fname=None):
 		super().__init__('localizer')
-		print("Localizer ln 60")
 		self.filename = fname
 		np.seterr(divide='ignore')
 		np.seterr(invalid='ignore')
-		# Init node
-		self.get_logger().info("Localizer node started")
-
 		self.ros = ros
+		self.n_rays = n_rays
 
 		# Declare parameters
 		from rcl_interfaces.msg import ParameterDescriptor
@@ -93,7 +87,6 @@ class Localizer(Node):
 		self.world_frame = self.get_parameter("world_frame").value
 		self.odom_topic = self.get_parameter("odom_topic").value
 
-		print("Localizer ln 90")
 
 		if ros:
 			# Create tf2 buffer and listener
@@ -125,7 +118,7 @@ class Localizer(Node):
 		xyz_guess = np.array([0, 0, 1.3])
 		xyz_std = [0.8, 0.8, 0.1]
 		rpy_std = [0.1, 0.1, 0.15]
-		self.init_particles_from_guess( 500, xyz_guess, rpy_guess, xyz_std, rpy_std, visualize=True)
+		self.init_particles_from_guess( n_particles, xyz_guess, rpy_guess, xyz_std, rpy_std, visualize=True)
 
 		self.viz = o3d.visualization.Visualizer()
 		self.viz.create_window()
@@ -182,7 +175,8 @@ class Localizer(Node):
 					pickle.dump(all_positions, f)
 					# Dict of positions and times
 				self.get_logger().info("Saved positions to file: {}".format(self.filename))
-			exit()
+			return False
+		return True
 
 
 	def init_particles_from_guess(self, n, guess_trans, guess_rpy, trans_std=[0.1,0.1,0.1], rpy_std=[0.1,0.1,0.1], visualize=False):
@@ -610,7 +604,7 @@ class Localizer(Node):
 		#plt.imsave("virtual_normals.png", (vnormals/2 + 0.5)[:, :511, :])
 
 		# Select rays for localization
-		ray_indices = self.select_rays(depth, xyz, 100, visualize=True)
+		ray_indices = self.select_rays(depth, xyz, self.n_rays, visualize=True)
 		
 		# 
 		rays = self.lidar.rays[ray_indices] # Assumes same lidar model. More correct solution is to take xyz from the incoming image and normalize it
