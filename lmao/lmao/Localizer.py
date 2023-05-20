@@ -6,6 +6,8 @@ import lmao_lib.world as World
 import lmao_lib.util.pclmao as pclmao
 from lmao_lib.mapping import get_normals
 
+import os
+
 from scipy.spatial.transform import Rotation as R
 import scipy.ndimage as ndimage
 from sklearn.metrics.pairwise import paired_cosine_distances
@@ -23,17 +25,33 @@ from rclpy.node import Node
 from sensor_msgs.msg import PointCloud2
 from rclpy.executors import MultiThreadedExecutor
 from rclpy.callback_groups import MutuallyExclusiveCallbackGroup
+from geometry_msgs.msg import Twist
 
 # Import odometry message
 from nav_msgs.msg import Odometry
+from geometry_msgs.msg import TransformStamped, PoseStamped, Transform
+from builtin_interfaces.msg import Time
 
 # Tf2
+import tf2_ros
 from tf2_ros import TransformException
 from tf2_ros.buffer import Buffer
 from tf2_ros.transform_listener import TransformListener
+from tf2_ros.transform_broadcaster import TransformBroadcaster
+
+import pickle
+
+print("Localizer ln 44")
+
+all_positions = []
+
+print("Localizer ln 48")
 
 #Import cv2
 import cv2
+
+SAVEFIGS = False
+VIRTUAL_PLAYBACK = False
 
 # Create window for cv2
 cv2.namedWindow("Normals", cv2.WINDOW_NORMAL)
@@ -42,23 +60,30 @@ cv2.namedWindow("Probabilities", cv2.WINDOW_NORMAL)
 cv2.namedWindow("Lidar", cv2.WINDOW_NORMAL)
 cv2.namedWindow("Dummy Lidar", cv2.WINDOW_NORMAL)
 
+print("Localizer ln 60")
+
 class Localizer(Node):
-	def __init__(self):
+	def __init__(self, ros=True, fname=None):
+		super().__init__('localizer')
+		print("Localizer ln 60")
+		self.filename = fname
 		np.seterr(divide='ignore')
 		np.seterr(invalid='ignore')
 		# Init node
-		super().__init__('localizer')
 		self.get_logger().info("Localizer node started")
+
+		self.ros = ros
 
 		# Declare parameters
 		from rcl_interfaces.msg import ParameterDescriptor
-		self.declare_parameter('map_path', '/home/junge/Documents/mesh_map/map.ply', ParameterDescriptor(description="Path to the map file"))
-		#self.declare_parameter('map_path', '/home/danitech/master_ws/src/Danitech-master/wagon_navigation/wagon_navigation/pose_data/isaac_map.ply', ParameterDescriptor(description="Path to the map file"))
+		self.declare_parameter('map_path', '/home/junge/Documents/mesh_map/island_boy2.ply', ParameterDescriptor(description="Path to the map file"))
+		#self.declare_parameter('map_path', "/home/danitech/Documents/maps/easter_island_boy.ply", ParameterDescriptor(description="Path to the map file"))
 		self.declare_parameter('lidar_topic', "/wagon/base_scan/lidar_data", ParameterDescriptor(description="Topic to subscribe to for lidar data"))
 		self.declare_parameter('max_range', 90000, ParameterDescriptor(description="Maximum range of the lidar in mm"))
 		self.declare_parameter('min_range', 2300, ParameterDescriptor(description="Minimum range of the lidar in mm"))
 		self.declare_parameter("world_frame", "world", ParameterDescriptor(description="The world frame (origin of the map)"))
 		self.declare_parameter("odom_topic", "/wagon/base_link_odom_gt", ParameterDescriptor(description="Topic where odometry data is published"))
+		#self.declare_parameter("odom_topic", "/odometry/local", ParameterDescriptor(description="Topic where odometry data is published"))
 
 		# Get parameters
 		self.map_path = self.get_parameter("map_path").value
@@ -68,17 +93,21 @@ class Localizer(Node):
 		self.world_frame = self.get_parameter("world_frame").value
 		self.odom_topic = self.get_parameter("odom_topic").value
 
-		# Create tf2 buffer and listener
-		self.tf_buffer = Buffer()
-		self.tf_listener = TransformListener(self.tf_buffer, self)
-		
-		# Create publisher
-		self.odom_pub = self.create_publisher(Odometry, self.odom_topic, 10)
-		self.get_logger().info("Publishing odometry data to topic: {}".format(self.odom_topic))
+		print("Localizer ln 90")
 
-		# Create the subscriber
-		self.create_subscription(PointCloud2, self.lidar_topic, self.lidar_callback, 10)
-		self.get_logger().info("Subscribed to topic: {}".format(self.lidar_topic))
+		if ros:
+			# Create tf2 buffer and listener
+			self.tf_buffer = Buffer()
+			self.tf_listener = TransformListener(self.tf_buffer, self)
+			self.tf_broadcaster = TransformBroadcaster(self)
+			
+			# Create publisher
+			self.odom_pub = self.create_publisher(Odometry, self.odom_topic, 10)
+			self.get_logger().info("Publishing odometry data to topic: {}".format(self.odom_topic))
+
+			# Create the subscriber
+			self.create_subscription(PointCloud2, self.lidar_topic, self.lidar_callback, 10)
+			self.get_logger().info("Subscribed to topic: {}".format(self.lidar_topic))
 		
 		# Load map
 		self.world = World.World(self.map_path)
@@ -91,7 +120,12 @@ class Localizer(Node):
 		self.get_logger().info("Created lidar object")
 
 		# Create particles
-		self.init_particles(1000, visualize=False)
+		#self.init_particles(500, visualize=False)
+		rpy_guess = [0, 0, 0]
+		xyz_guess = np.array([0, 0, 1.3])
+		xyz_std = [0.8, 0.8, 0.1]
+		rpy_std = [0.1, 0.1, 0.15]
+		self.init_particles_from_guess( 500, xyz_guess, rpy_guess, xyz_std, rpy_std, visualize=True)
 
 		self.viz = o3d.visualization.Visualizer()
 		self.viz.create_window()
@@ -109,24 +143,73 @@ class Localizer(Node):
 		self.particle_pcd.points = o3d.utility.Vector3dVector(self.particles[:, :3])
 		dir_vecs = self.rotations.apply(np.array([[1, 0, 0]]))
 		self.particle_pcd.normals = o3d.utility.Vector3dVector(dir_vecs)
-		self.viz.add_geometry(self.particle_pcd)
+		#self.viz.add_geometry(self.particle_pcd)
 		self.viz.add_geometry(self.average_pcd)
 		self.render_option = self.viz.get_render_option()
 		self.render_option.point_show_normal = True
 
-		# Create timer to update the visualization every 0.1 seconds
-		self.viz_timer = self.create_timer(0.1, self.viz_loop)
+		if ros:
+			# Create timer to update the visualization every 0.1 seconds
+			self.viz_timer = self.create_timer(0.2, self.viz_loop)
 
-		# Subscribe to the odometry topic
-		self.create_subscription(Odometry, self.odom_topic, self.odom_callback, 10)
-		self.get_logger().info("Subscribed to topic: {}".format(self.odom_topic))
+			# Subscribe to the odometry topic
+			self.create_subscription(Odometry, self.odom_topic, self.odom_callback, 10)
+			self.get_logger().info("Subscribed to topic: {}".format(self.odom_topic))
 		self.stamp = None
 
 		self.particle_learning_rate = 0.05
 		self.particle_full_resample_rate = 0.0
 		self.particles_to_keep = 0.2
 
+		self.clock = None
+
 		self.counter = 0
+
+		if ros:
+			# Subscribe to cmd_vel for file saving
+			self.create_subscription(Twist, "/cmd_vel", self.cmd_vel_callback, 10)
+
+		print("Localizer initialized")
+
+
+	def cmd_vel_callback(self, msg):
+		# If the linear velocity is 0, save the positions to filename
+		if msg.linear.x == 0:
+			# Print available info about all_positions
+			print("Length of all_positions: {}".format(len(all_positions)))
+			if self.filename is not None:
+				with open(self.filename, "wb") as f:
+					pickle.dump(all_positions, f)
+					# Dict of positions and times
+				self.get_logger().info("Saved positions to file: {}".format(self.filename))
+			exit()
+
+
+	def init_particles_from_guess(self, n, guess_trans, guess_rpy, trans_std=[0.1,0.1,0.1], rpy_std=[0.1,0.1,0.1], visualize=False):
+		self.n_particles = n
+		self.particles = np.zeros((self.n_particles, 7))
+		# Create random particles using the guess
+		self.particles[:,0] = np.random.normal(guess_trans[0], trans_std[0], self.n_particles)
+		self.particles[:,1] = np.random.normal(guess_trans[1], trans_std[1], self.n_particles)
+		self.particles[:,2] = np.random.normal(guess_trans[0], trans_std[0], self.n_particles)
+		roll = np.random.normal(guess_rpy[0], rpy_std[0], self.n_particles)
+		pitch = np.random.normal(guess_rpy[1], rpy_std[1], self.n_particles)
+		yaw = np.random.normal(guess_rpy[2], rpy_std[2], self.n_particles)
+		# Convert the particles to quaternions
+		self.rotations = R.from_euler("xyz", np.vstack((roll, pitch, yaw)).T)
+		self.probabilities = np.ones(self.n_particles)/self.n_particles
+		if visualize:
+			# Convert quats to a direction vector, by rotating [1, 0, 0]
+			dir_vecs = self.rotations.apply([1, 0, 0])
+
+			# Create pcd from the particles
+			pcd = o3d.geometry.PointCloud()
+			pcd.points = o3d.utility.Vector3dVector(self.particles[:,:3])
+			pcd.normals = o3d.utility.Vector3dVector(dir_vecs)
+			pcd.paint_uniform_color([0, 0, 1])
+			#o3d.visualization.draw_geometries([pcd, self.world.world], point_show_normal=True)
+
+
 
 	def viz_loop(self):
 		self.particle_pcd.points = o3d.utility.Vector3dVector(self.particles[:, :3])
@@ -137,12 +220,55 @@ class Localizer(Node):
 		colors[:, 0] = 1 - (self.probabilities / np.max(self.probabilities))
 		self.particle_pcd.colors = o3d.utility.Vector3dVector(colors)
 
+		
+
 		avg_pos, avg_rot = self.get_centroid()
+
+		# Get transform from base_scan to odom. This is the transform from the lidar to the odom zero
+		# try:
+		# 	if self.clock is not None:
+		# 		t = self.tf_buffer.lookup_transform("base_scan", "odom", self.clock)
+		# 		BS2O = np.eye(4)
+		# 		BS2O[:3, :3] = R.from_quat([t.transform.rotation.x, t.transform.rotation.y, t.transform.rotation.z, t.transform.rotation.w]).as_matrix()
+		# 		BS2O[:3, 3] = [t.transform.translation.x, t.transform.translation.y, t.transform.translation.z]
+
+		# 		# Create transformation matrix of avg_pos and avg_rot
+		# 		M2BS = np.eye(4)
+		# 		M2BS[:3, :3] = avg_rot.as_matrix()
+		# 		M2BS[:3, 3] = avg_pos
+				
+
+		# 		# Calculate the combined transform from map to odom
+		# 		M2O = np.matmul(BS2O, M2BS)
+
+		# 		# Create TransformStamped of W2O
+		# 		M2O_msg = TransformStamped()
+		# 		M2O_msg.header.stamp = self.clock
+		# 		M2O_msg.header.frame_id = "map"
+		# 		M2O_msg.child_frame_id = "odom"
+		# 		M2O_msg.transform.translation.x = M2O[0, 3]
+		# 		M2O_msg.transform.translation.y = M2O[1, 3]
+		# 		M2O_msg.transform.translation.z = M2O[2, 3]
+		# 		quat = R.from_matrix(M2O[:3, :3]).as_quat()
+		# 		M2O_msg.transform.rotation.x = quat[0]
+		# 		M2O_msg.transform.rotation.y = quat[1]
+		# 		M2O_msg.transform.rotation.z = quat[2]
+		# 		M2O_msg.transform.rotation.w = quat[3]
+				
+		# 		# Publish the transform
+		# 		self.tf_broadcaster.sendTransform(M2O_msg)
+		# 		self.get_logger().info("Published transform from map to odom")
+		# except TransformException as e:
+		# 	self.get_logger().error("Transform error: {}, when transforming from {} to {}".format(e, "base_scan", "odom"))
+
+		#if self.clock is not None:
+		#	self.send_transform(avg_pos, avg_rot)
+		#	baselink_avg_pos = avg_pos + avg_rot.apply([0, 0, -1])
+		#	all_positions.append([baselink_avg_pos, avg_rot.as_quat(), self.clock.sec + self.clock.nanosec * 1e-9])
+
+		#self.send_transform(avg_pos, avg_rot)
 		self.average_pcd.points = o3d.utility.Vector3dVector(np.array([avg_pos]))
 		self.average_pcd.normals = o3d.utility.Vector3dVector(avg_rot.apply(np.array([[1, 0, 0]])))
-		# Move avergae arrow to position of average_pcd.points
-		# self.mesh_average_arrow.translate(avg_pos - self.mesh_average_arrow.get_center())
-		#self.mesh_average_arrow.rotate(avg_rot.as_matrix, center=avg_pos)
 
 		# self.viz.update_geometry(self.particle_pcd)
 		self.viz.update_geometry(self.average_pcd)
@@ -152,20 +278,41 @@ class Localizer(Node):
 		# self.mesh_average_arrow.rotate(avg_rot.inv().as_matrix, center=avg_pos)
 
 
+	def send_transform(self, translation, rotation):
+		t = TransformStamped()
+		t.header.stamp = self.clock
+		t.header.frame_id = "world"
+		t.child_frame_id = "localized_base_link"
+		# Extract inverse translation and rotation
+		trans = translation + rotation.apply([0, 0, -1]) # Offset for lidar
+		t.transform.translation.x = trans[0]
+		t.transform.translation.y = trans[1]
+		t.transform.translation.z = trans[2]
+		quat = rotation.as_quat()
+		t.transform.rotation.x = quat[0]
+		t.transform.rotation.y = quat[1]
+		t.transform.rotation.z = quat[2]
+		t.transform.rotation.w = quat[3]
+
+		# Publish transform
+		self.tf_broadcaster.sendTransform(t)
+		
+
 	def odom_callback(self, msg):
 		if self.stamp is None:
 			self.stamp = msg.header.stamp.sec + msg.header.stamp.nanosec * 1e-9
 			return
+		#self.clock = msg.header.stamp
 		new_stamp = msg.header.stamp.sec + msg.header.stamp.nanosec * 1e-9
 		dt = new_stamp - self.stamp
 		self.stamp = new_stamp
-		print("dt: {}".format(dt))
+		# print("dt: {}".format(dt))
 		linear = np.array([msg.twist.twist.linear.x, msg.twist.twist.linear.y, msg.twist.twist.linear.z]) * dt
 		angular = np.array([msg.twist.twist.angular.x, msg.twist.twist.angular.y, msg.twist.twist.angular.z]) * dt
 		# Apply twist to particles
 		for i, r in enumerate(self.rotations):
-			if i == 0:
-				continue
+			# if i == 0:
+			# 	continue
 			self.particles[i, :3] += r.apply(linear)
 			ang = r.apply(angular)
 			# Concatenate rotation and ang
@@ -180,24 +327,31 @@ class Localizer(Node):
 		new_stamp = msg.header.stamp.sec + msg.header.stamp.nanosec * 1e-9
 		dt = new_stamp - self.stamp
 		self.stamp = new_stamp
-		print("dt: {}".format(dt))
+		# print("dt: {}".format(dt))
 		linear = np.array([msg.twist.twist.linear.x, msg.twist.twist.linear.y, msg.twist.twist.linear.z]) * dt
 		angular = np.array([msg.twist.twist.angular.x, msg.twist.twist.angular.y, msg.twist.twist.angular.z]) * dt
 		# Apply twist to particles
+		ang = R.from_euler("xyz", angular)
 		for i, r in enumerate(self.rotations):
-			if i == 0:
-				continue
+			# if i == 0:
+			# 	continue
 			self.particles[i, :3] += linear
 			# Angular is the twist in the body frame.
 			# We need to rotate it to the world frame
 			# before applying it to the particles
-			ang = R.from_euler("xyz", angular)
 			self.rotations[i] = self.rotations[i] * ang
 		return
 
 
 
 	def resample_particles(self):
+		avg_pos, avg_rot = self.get_centroid()
+		if self.clock is not None:
+			if self.ros:
+				self.send_transform(avg_pos, avg_rot)
+			baselink_avg_pos = avg_pos + avg_rot.apply([0, 0, -1])
+			all_positions.append([baselink_avg_pos, avg_rot.as_quat(), self.clock.sec + self.clock.nanosec * 1e-9])
+
 		# Normalize probabilities
 		# self.probabilities = self.probabilities / np.sum(self.probabilities)
 		# Keep self.particles_to_keep of the particles
@@ -251,8 +405,8 @@ class Localizer(Node):
 			resample_n = int(self.particle_full_resample_rate * self.particles.shape[0])
 			# Replace the lowest resample_n probable particles with new ones
 			sorted_index = np.argsort(self.probabilities)
-			print("Particle probabilities: {}".format(self.probabilities))
-			print("Particles being replaced: {}".format(sorted_index[:resample_n]))
+			# print("Particle probabilities: {}".format(self.probabilities))
+			# print("Particles being replaced: {}".format(sorted_index[:resample_n]))
 			self.particles[sorted_index[:resample_n], :3] = self.world.get_probable_random_points(resample_n, poisson=True)
 			# Set the probabilities of the new particles to 1/n
 			self.probabilities[sorted_index[:resample_n]] = 1.0 / self.particles.shape[0]
@@ -283,7 +437,7 @@ class Localizer(Node):
 		# Add the new origo to the new directions
 		new_rays[:, :3] = new_origo
 		#new_rays[:, :3] += new_origo
-		print("New rays shape: {}".format(new_rays.shape))
+		# print("New rays shape: {}".format(new_rays.shape))
 		return new_rays.astype(np.float32)
 	
 
@@ -292,12 +446,12 @@ class Localizer(Node):
 		# Transform the rays for each particle
 		rays = self.get_particle_lidar_rays(target_rays)
 
-		print("Casting {} rays".format(rays.shape[0]))
+		# print("Casting {} rays".format(rays.shape[0]))
 		t0 = time.time()
 		raycast = self.world.scene.cast_rays(rays)
 		raycast_depth =raycast["t_hit"].numpy()
 		raycast_normals = raycast['primitive_normals'].numpy()
-		print("Time to cast rays: {}".format(time.time()-t0))
+		# print("Time to cast rays: {}".format(time.time()-t0))
 
 		# Reshape the raycast
 		raycast_normals = raycast_normals.reshape(self.n_particles, -1, 3) # Was (n_particles, 128, 1024, 3)
@@ -314,9 +468,8 @@ class Localizer(Node):
 		return pos_avg, rot_avg
 
 
-
-
 	def init_particles(self, n, visualize=False):
+		self.world.prep_world_for_random()
 		# Create particles
 		self.n_particles = n
 		self.particles = self.world.get_probable_random_points(self.n_particles)
@@ -337,7 +490,6 @@ class Localizer(Node):
 		self.probabilities = np.ones(self.n_particles)/self.n_particles
 
 		
-
 		if visualize:
 			# Convert quats to a direction vector, by rotating [1, 0, 0]
 			dir_vecs = R.from_quat(quats).apply([1, 0, 0])
@@ -352,40 +504,71 @@ class Localizer(Node):
 		# Add the quaternions to the particles
 		self.particles = np.hstack((self.particles, quats))
 
-		print("Particles shape: {}".format(self.particles.shape))
-
+		# print("Particles shape: {}".format(self.particles.shape))
 
 
 	def lidar_callback(self, msg):
-		# Attempt to get transform at time of message, otherwise get most recent
-		try:
-			# Get the true transform at the time of the message
-			t = self.tf_buffer.lookup_transform(self.world_frame, msg.header.frame_id, msg.header.stamp)
-		except TransformException as e:
-			# self.get_logger().warn("Transform error: {}, when transforming from {} to {}\n Trying most recent".format(e, msg.header.frame_id, self.world_frame))
-			t = None
-			
-		if t is None:
-			try:
-				# Get the most recent transform
-				t = self.tf_buffer.lookup_transform(self.world_frame, msg.header.frame_id, rclpy.time.Time())
-			except TransformException as e:
-				self.get_logger().error("Transform error: {}, when transforming from {} to {}".format(e, msg.header.frame_id, self.world_frame))
-				return
-
+		self.clock = msg.header.stamp
 		data = pclmao.extract_PointCloud2_data(msg)
+
 		# x = data["x"], y = data["y"], z = data["z"]
 		# Shape of x: (1024, 128, 1)
 		xyz = np.dstack((data["x"], data["y"], data["z"]))
 		# Shape of xyz: (1024, 128, 3)
 		depth = data["range"]
 
-		# # extract the rotation and translation components of the transform
-		rotation = [t.transform.rotation.x, t.transform.rotation.y, t.transform.rotation.z, t.transform.rotation.w]
-		translation = [t.transform.translation.x, t.transform.translation.y, t.transform.translation.z]
-		
-		print("Actual translation: {}".format(translation))
-		print("Actual rotation: {}".format(rotation))
+		#Shape of xyz: (1024, 128, 3)
+		xyz = np.rot90(xyz, 1, (1, 0))
+		depth = np.rot90(depth, 1, (1, 0))
+
+		# Get the normals
+		normals = get_normals(xyz)
+
+		depth_mask = depth > self.max_range
+		normals[depth_mask[:, :, 0]] = 0
+
+		if VIRTUAL_PLAYBACK == True:
+			# Attempt to get transform at time of message, otherwise get most recent
+			try:
+				# Get the true transform at the time of the message
+				t = self.tf_buffer.lookup_transform(self.world_frame, msg.header.frame_id, msg.header.stamp)
+			except TransformException as e:
+				# self.get_logger().warn("Transform error: {}, when transforming from {} to {}\n Trying most recent".format(e, msg.header.frame_id, self.world_frame))
+				t = None
+				
+			if t is None:
+				try:
+					# Get the most recent transform
+					t = self.tf_buffer.lookup_transform(self.world_frame, msg.header.frame_id, rclpy.time.Time())
+				except TransformException as e:
+					self.get_logger().error("Transform error: {}, when transforming from {} to {}".format(e, msg.header.frame_id, self.world_frame))
+					return
+				
+			# # extract the rotation and translation components of the transform
+			rotation = [t.transform.rotation.x, t.transform.rotation.y, t.transform.rotation.z, t.transform.rotation.w]
+			translation = [t.transform.translation.x, t.transform.translation.y, t.transform.translation.z]
+			
+			# print("Actual translation: {}".format(translation))
+			# print("Actual rotation: {}".format(rotation))
+
+			# Create similar image from virtual world and lidar
+			rays = self.lidar.rotate_rays(rotation)
+			rays += [translation[0], translation[1], translation[2], 0, 0, 0]
+
+			raycast = self.world.cast_rays(rays)
+			
+
+			vdepth = raycast['t_hit'].numpy()
+			vnormals = raycast['primitive_normals'].numpy()
+
+			r_xd = R.from_quat(rotation)
+
+			vnormals = r_xd.apply(vnormals.reshape(-1, 3)).reshape(vnormals.shape)
+
+			# Show normals as 2d image in opencv that updates as new data comes in
+			#vnormals[depth_mask[:, :, 0]] = 0
+			cv2.imshow("Virtual normals", abs(vnormals))
+			cv2.waitKey(1)
 
 		# # Construct the transformation matrix
 		# r = R.from_quat(rotation)
@@ -397,19 +580,20 @@ class Localizer(Node):
 		# # Transform the data
 		# xyz = np.matmul(xyz, T[:3, :3].T) + T[:3, 3]
 
-
-		#Shape of xyz: (1024, 128, 3)
-		xyz = np.rot90(xyz, 1, (1, 0))
-		depth = np.rot90(depth, 1, (1, 0))
-
-		# Get the normals
-		normals = get_normals(xyz)
-
 		# Show normals as 2d image in opencv that updates as new data comes in
 		# Shape of normals: (1024, 128, 3)
 		# Convert to 2d image
 		cv2.imshow("Normals", abs(normals))
 		cv2.waitKey(1)
+		# Get indices of depth < self.max_range
+		# print("Depth mash shape: {}".format(depth_mask.shape))
+		# print("Normals shape: {}".format(normals.shape))
+
+
+
+		#plt.imshow(normals/2 + 0.5)
+		#plt.show()
+		#plt.imsave("normals.png", (normals/2 + 0.5)[:, :511, :])
 
 		# Set self.lidar.rays as rays from the lidar
 		# Assert that all rays are not nan or inf
@@ -419,21 +603,11 @@ class Localizer(Node):
 
 		#print("First lidar ray: {}".format(self.lidar.rays[0, 0, :]))
 		#print("First dummy lidar ray: {}".format(self.dummy_lidar.rays[0, 0, :]))
-		
 
-
-		# Create similar image from virtual world and lidar
-		rays = self.lidar.rotate_rays(rotation)
-		rays += [translation[0], translation[1], translation[2], 0, 0, 0]
-
-		raycast = self.world.cast_rays(rays)
-
-		vdepth = raycast['t_hit'].numpy()
-		vnormals = raycast['primitive_normals'].numpy()
-
-		# Show normals as 2d image in opencv that updates as new data comes in
-		cv2.imshow("Virtual normals", abs(vnormals))
-		cv2.waitKey(1)
+		# Use matplotlib to show normals
+		#plt.imshow(vnormals/2 + 0.5)
+		#plt.show()
+		#plt.imsave("virtual_normals.png", (vnormals/2 + 0.5)[:, :511, :])
 
 		# Select rays for localization
 		ray_indices = self.select_rays(depth, xyz, 100, visualize=True)
@@ -453,7 +627,7 @@ class Localizer(Node):
 		# rays = self.lidar.rays
 		# rays = rays.reshape(-1, 6)
 
-		print("Shape of rays: {}".format(rays.shape))
+		# print("Shape of rays: {}".format(rays.shape))
 
 		# Inject actual robot position into particle [0]
 		#self.particles[0] = np.array([translation[0], translation[1], translation[2], rotation[0], rotation[1], rotation[2], rotation[3]])
@@ -474,66 +648,46 @@ class Localizer(Node):
 		for i, r in enumerate(self.rotations):
 			raycast_normals[i] = r.apply(raycast_normals[i])
 
-		# Show normals as 2d image in opencv that updates as new data comes in
-		#raycast_image = np.zeros((self.particles.shape[0], 128, 1024, 3))
-		#for i in range(self.particles.shape[0]):
-		#	raycast_image[i] = abs(raycast_normals[i].reshape(128, 1024, 3))
 
-		#cv2.imshow("Virtual normals", abs(raycast_image[0]))
-		#cv2.waitKey(1)
-
-
-		# print("Shape of raycast_normals: {}".format(raycast_normals.shape))
-		# print("Shape of actual_normals: {}".format(actual_normals.shape))
-
-		# print("Mean of raycast_depth: {}".format(np.mean(raycast_depth[0])))
-		# print("Mean of actual_depth: {}".format(np.mean(actual_depth)))
-
-		# print("Shape of raycast_depth: {}".format(raycast_depth.shape))
-		# print("Shape of actual_depth: {}".format(actual_depth.shape))
-
-		hard_depth = np.linalg.norm(raycast_depth[0] - actual_depth)
+		# hard_depth = np.linalg.norm(raycast_depth[0] - actual_depth)
 		# print("Hard depth: {}".format(hard_depth))
 
-
-		# Calculate the error for all. raycast is [n, rays], actual is [rays]
-		#error_depth = raycast_depth - actual_depth
 		# Should be shape n
 		error_depth = np.linalg.norm(raycast_depth - actual_depth, axis=1).ravel()
 
 		# print("Shape of error_depth: {}".format(error_depth.shape))
 
 		# Calculate mean and variance of error
-		mean_depth = np.mean(error_depth[1])
-		var_depth = np.std(error_depth[1])
-		# print("Mean depth error: {}".format(mean_depth))
-		# print("StdDev depth error: {}".format(var_depth))
-		# print("Min depth error_ {}, max depth error: {}".format(np.min(error_depth[1]), np.max(error_depth[1])))
+		# mean_depth = np.mean(error_depth[1])
+		# var_depth = np.std(error_depth[1])
 
-		# Calculate the error for all. raycast is [n, rays, 3], actual is [rays, 3]
-		error_normal = np.linalg.norm(raycast_normals[:, :, 2][:, np.newaxis, :] - actual_normals[np.newaxis, :, 2], axis=2).ravel()
+		# # Calculate the error for all. raycast is [n, rays, 3], actual is [rays, 3]
+		# error_normal = np.linalg.norm(raycast_normals[:, :, 2][:, np.newaxis, :] - actual_normals[np.newaxis, :, 2], axis=2).ravel()
 
 		# Calculate MSE for depth
-		mse = np.zeros(raycast_depth.shape[0])
-		for i in range(raycast_depth.shape[0]):
-			mse[i] = np.mean(np.square(raycast_depth[i] - actual_depth))
+		# mse = np.zeros(raycast_depth.shape[0])
+		# for i in range(raycast_depth.shape[0]):
+		# 	mse[i] = np.mean(np.square(raycast_depth[i] - actual_depth))
 
-		cosine_dist = np.zeros(self.particles.shape[0])
-		for i in range(self.particles.shape[0]):
-			#cosine_dist[i] = np.mean(paired_cosine_distances(actual_normals, raycast_normals[i]))
-			cosine_dist[i] = np.mean( np.square(paired_cosine_distances(actual_normals, raycast_normals[i])) )
-
-
-		# print("Shape of normal error: {}".format(error_normal.shape))
-		# print("Shape of depth error: {}".format(error_depth.shape))
-		# print("Shape of cosine_dist_normal: {}".format(cosine_dist_normal.shape))
-
-
+		# cosine_dist = np.zeros(self.particles.shape[0])
+		# for i in range(self.particles.shape[0]):
+		# 	#cosine_dist[i] = np.mean(paired_cosine_distances(actual_normals, raycast_normals[i]))
+		# 	cosine_dist[i] = np.mean( np.square(paired_cosine_distances(actual_normals, raycast_normals[i])) )
+		# Or perhaps the 35 times faster version i just cooked up:
+		cosine_dist = np.mean(
+			np.square(
+				0.5 * np.square(
+					np.linalg.norm(
+						raycast_normals - actual_normals.reshape(1, actual_normals.shape[0], actual_normals.shape[1]), axis=2
+						)
+					)
+				), axis=1
+			)
 		# Print what order of indexes with the lowest error, ie [100, 69, 52] would mean that the 100th particle has the lowest error, 69th the second lowest and so on
-		best_indicies_depth = np.argsort(error_depth)
-		best_indicies_normal = np.argsort(error_normal)
-		best_indicies_mse = np.argsort(mse)
-		best_indicies_cosine = np.argsort(cosine_dist)
+		# best_indicies_depth = np.argsort(error_depth)
+		# best_indicies_normal = np.argsort(error_normal)
+		# best_indicies_mse = np.argsort(mse)
+		# best_indicies_cosine = np.argsort(cosine_dist)
 
 		# print("Best indicies d: {}".format(best_indicies_depth))
 		# print("Values d: {}".format(error_depth[best_indicies_depth]))
@@ -548,12 +702,12 @@ class Localizer(Node):
 		d_processed = np.power(error_depth, -1)
 		d_processed = d_processed / np.sum(d_processed)
 
-		mse_processed = np.power(mse, -1)
-		mse_processed = mse_processed / np.sum(mse_processed)
+		# mse_processed = np.power(mse, -1)
+		# mse_processed = mse_processed / np.sum(mse_processed)
 
 		#n_processed = np.power(error_normal, 1)
-		n_processed = np.power(error_normal, -1)
-		n_processed = n_processed / np.sum(n_processed)
+		# n_processed = np.power(error_normal, -1)
+		# n_processed = n_processed / np.sum(n_processed)
 
 		cos_processed = np.power(cosine_dist, -1)
 		cos_processed = cos_processed / np.sum(cos_processed)
@@ -573,26 +727,81 @@ class Localizer(Node):
 
 		self.best_indices = np.argsort(self.probabilities)
 
-		print("Highest 5 probabilities: {}".format(np.flip( self.probabilities[self.best_indices[-5:]])))
-		print("Indices of highest 5 probabilities: {}".format(np.flip(self.best_indices[-5:])))
-		print("Best index: {}".format(self.best_index))
+		# print("Highest 5 probabilities: {}".format(np.flip( self.probabilities[self.best_indices[-5:]])))
+		# print("Indices of highest 5 probabilities: {}".format(np.flip(self.best_indices[-5:])))
+		# print("Best index: {}".format(self.best_index))
 
 		self.counter += 1
 		if self.counter % 5 == 0:
 			self.resample_particles()
+
+
+	def plot_prob(self, p, name, n_selections = None, rows = None, cols = None, viz = False):
+		if SAVEFIGS == False:
+			return
+		# Get number of dimensions of numpy array p
+		dim = len(p.shape)
+		if dim == 3:
+			p_local = p[:, :, 0]
+		else:
+			p_local = p
+
+
+		# Create image of probabilities
+		#prob_image = np.zeros((p_local.shape[0], p_local.shape[1], 3))
+		# Set the probabilities as the all (so it goes from black to white)
+
+		cmap = plt.get_cmap('viridis')
+		# Normalize the probabilities to 0-1
+		prob_array = (p_local-np.min(p_local)) / (np.max(p_local)-np.min(p_local))
+		prob_image = cmap(prob_array)
+		# Remove alpha channel
+		prob_image = prob_image[:, :, :3]
+
+		#prob_image[:, :, 0] = (p_local-np.min(p_local)) / (np.max(p_local)-np.min(p_local))
+		#prob_image[:, :, 1] = (p_local-np.min(p_local)) / (np.max(p_local)-np.min(p_local))
+		#prob_image[:, :, 2] = (p_local-np.min(p_local)) / (np.max(p_local)-np.min(p_local))
+
+		if rows is not None and cols is not None:
+			prob_image[rows, cols, :] = [0.5, 0.5, 0.1]
+
+		if n_selections is not None:
+			random_indices = np.random.choice(p_local.shape[0] * p_local.shape[1], size=n_selections, replace=False, p=(p_local / np.sum(p_local)).ravel())
+			selected_indices = np.unravel_index(random_indices, (128, 1024))
+			prob_image[selected_indices[0], selected_indices[1], :] = [1, 0, 0]
+
+		# Show the image
+		if viz:
+			plt.imshow(prob_image)
+			plt.title(name)
+			plt.show()
+		plt.imsave(__file__[:-3] + "_" + name + ".png", prob_image)
+
 			
 
 
 	def select_rays(self, depth, xyz, amount, visualize=False):
+		# Find all places where depth outside min and max range
+		rows, cols, _ = np.where((depth < self.min_range) | (depth > self.max_range))
+
 		# Get the normals
 		normals = get_normals(xyz)
 
 		# Calculate gradient of depth
 		depth_gradient = np.gradient(depth, axis=(0, 1))
 		depth_gradient = np.abs(depth_gradient[0]) + np.abs(depth_gradient[1])
+		max_gradient = np.max(depth_gradient)
+		depth_gradient[np.isinf(depth_gradient)] = max_gradient
+		depth_gradient[np.isnan(depth_gradient)] = max_gradient
 
-		# Find all places where depth outside min and max range
-		rows, cols, _ = np.where((depth < self.min_range) | (depth > self.max_range))
+		depth_gradient = 1/(5+depth_gradient)
+		
+		depth_gradient[rows, cols] = 0
+
+		depth_gradient = depth_gradient / np.sum(depth_gradient)
+
+
+		
 
 		normals[rows, cols, :] = 0
 		depth[rows, cols] = 0
@@ -612,47 +821,65 @@ class Localizer(Node):
 		probabilities2 = np.zeros((128, 1024))
 		probabilities2[nonzero_indices[0], nonzero_indices[1]] = probabilities
 		# Scale the probabilities to 0-1
-		dist_probabilities = (probabilities2 / np.max(probabilities2))
 		
-		# Invert depth gradient, such that lower values are more likely to be selected
-		depth_gradient = 1.0 / depth_gradient
+		#dist_probabilities = (probabilities2 / np.max(probabilities2))
+		depth[np.isinf(depth)] = self.max_range
+		depth[np.isnan(depth)] = self.max_range
+		dist_probabilities = 1 / (1 + depth)
+		dist_probabilities[rows, cols] = 0
+		dist_probabilities = dist_probabilities / np.sum(dist_probabilities)
 
-		# Set nan to 0
-		depth_gradient[np.isinf(depth_gradient)] = 0
+		# print("Max dept_gradient: {}".format(np.max(depth_gradient)))
+		# print("Min dept_gradient: {}".format(np.min(depth_gradient)))
+		# print("Size of depth_gradient: {}".format(depth_gradient.shape))
+		# print("Max dist_probabilities: {}".format(np.max(dist_probabilities)))
+		# print("Min dist_probabilities: {}".format(np.min(dist_probabilities)))
+		# print("Size of dist_probabilities: {}".format(dist_probabilities.shape))
+		self.plot_prob(depth_gradient, "depth_gradient", n_selections=1000, rows=rows, cols=cols)
+		self.plot_prob(dist_probabilities, "dist_probabilities", n_selections=1000, rows=rows, cols=cols)
 
-		depth_gradient = np.clip(depth_gradient, 0.0, 1)
+		# # Invert depth gradient, such that lower values are more likely to be selected
+		# depth_gradient = 1.0 / depth_gradient
 
-		# Apply gaussian filter to depth gradient
-		depth_gradient = ndimage.gaussian_filter(depth_gradient, sigma=1.0)
-		
-		#plt.imshow(depth_gradient)
-		#plt.show()
+		# # Set nan to 0
+		# depth_gradient[np.isinf(depth_gradient)] = 0
+
+		# depth_gradient = np.clip(depth_gradient, 0.0, 1)
+
+		# # Apply gaussian filter to depth gradient
+		# depth_gradient = ndimage.gaussian_filter(depth_gradient, sigma=1.0)
+
+		# #Scale depth gradient to 0-1
+		# depth_gradient = (depth_gradient / np.max(depth_gradient))[:,:,0] # Otherwise is [m,n,1]
+
+		# Set nan to max gradient
 
 
-		#Scale depth gradient to 0-1
-		depth_gradient = (depth_gradient / np.max(depth_gradient))[:,:,0] # Otherwise is [m,n,1]
 
 		# print("Depth gradient shape: {}".format(depth_gradient.shape))
 		# print("Dist probabilities shape: {}".format(dist_probabilities.shape))
 
 		# Average the two probabilities
-		probabilities = depth_gradient*0.5 + dist_probabilities*0.5
-		#probabilities = depth_gradient * dist_probabilities
+		probabilities = depth_gradient*0.3 + dist_probabilities*0.7
+		probabilities_multiply = depth_gradient * dist_probabilities
+		probabilities_multiply = probabilities_multiply / np.sum(probabilities_multiply)
 
+		self.plot_prob(probabilities, "probabilities", n_selections=1000, rows=rows, cols=cols)
+		self.plot_prob(probabilities_multiply, "probabilities_multiply", n_selections=1000, rows=rows, cols=cols)
 		probabilities[rows, cols] = 0
-
-		probabilities_image = np.zeros((128, 1024, 3))
-		probabilities_image[:,:,0] = probabilities
+		probabilities = probabilities[:,:,0]
 
 		random_indices = np.random.choice(probabilities.shape[0] * probabilities.shape[1], size=amount, replace=False, p=(probabilities / np.sum(probabilities)).ravel())
 		
 		selected_indices = np.unravel_index(random_indices, (128, 1024))
 
-		probabilities_image[selected_indices[0], selected_indices[1]] = [0, 1, 0]
+		
 
 		if visualize:
+			probabilities_image = np.zeros((128, 1024, 3))
+			probabilities_image[:,:,0] = probabilities
+			probabilities_image[selected_indices[0], selected_indices[1]] = [0, 1, 0]
 			cv2.imshow("Probabilities", probabilities_image)
-
 		return selected_indices
 
 

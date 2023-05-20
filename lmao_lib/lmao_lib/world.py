@@ -25,14 +25,24 @@ class World:
 				raise FileNotFoundError("World file not found.")
 			self.world = o3d.io.read_triangle_mesh(world_file)
 			print("World loaded from file: ", world_file)
+			print("World has normals: ", self.world.has_triangle_normals(), "\nWorld has vertex normals: ", self.world.has_vertex_normals())
+			# Check if world triangles has normals
+			if not self.world.has_triangle_normals():
+				print("Computing normals")
+				# Compute normals
+				self.world.compute_triangle_normals()
+			else:
+				print("World has normals")
 		else:
 			self.world = o3d.geometry.TriangleMesh()
 			print("Empty world created.")
 
+		
+
 		self.scene = o3d.t.geometry.RaycastingScene()
 		self.scene.add_triangles(o3d.t.geometry.TriangleMesh.from_legacy(self.world))
 
-		self.prep_world_for_random()
+		#self.prep_world_for_random()
 
 	def boolean_mesh(self, mesh, boolean_operation = "union", tolerance = 1e-6):
 		# Add a mesh to the world.
@@ -86,14 +96,7 @@ class World:
 
 	
 	def prep_world_for_random(self):
-		print("World has normals: ", self.world.has_triangle_normals(), "\nWorld has vertex normals: ", self.world.has_vertex_normals())
-		# Check if world triangles has normals
-		if not self.world.has_triangle_normals():
-			print("Computing normals")
-			# Compute normals
-			self.world.compute_triangle_normals()
-		else:
-			print("World has normals")
+		
 		
 		# Remove all triangles with normal z < 0.8
 		print("Removing triangles with normal z < 0.8")

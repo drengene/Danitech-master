@@ -199,6 +199,7 @@ class IsaacSim(Node):
         #path = "/home/danitech/isaac_ws/environments/USD/Quarray_en_cantera.usd"
         #path = "/home/danitech/isaac_ws/environments/USD/fun_in_a_bun.usd"
         path = "/home/danitech/isaac_ws/environments/USD/simple_ramp.usd"
+        #path = "/home/danitech/Documents/mesh_world.usd"
         #path = "/home/danitech/isaac_ws/environments/USD/cube_box_world.usd"
 
         #path = "/home/danitech/master_ws/src/Danitech-master/wagon_isaac/usd/environments/warehouse.usd"    
@@ -207,8 +208,8 @@ class IsaacSim(Node):
         prim_stage = stage.add_reference_to_stage(usd_path=path, prim_path=prim_path)
         prim = XFormPrim(
             prim_path=prim_path, name="grass",
-            #position=np.array([0, 23, -87]), # Position for wagon in center of quarry scene
-            position=np.array([0, 0.0, 0.0]),
+            position=np.array([0, 0, 0]), # Position for wagon in center of quarry scene
+            #position=np.array([0, 0.0, 0.0]),
             #orientation=np.array([-0.7071068, 0, 0, 0.7071068])
         )
         self.world.scene.add(prim)
@@ -260,7 +261,8 @@ class IsaacSim(Node):
         self.robot = self.world.scene.add(
             WheeledRobot(
                 prim_path=self.wagon_prim_path,
-                position=np.array([0, 0, 0]),
+                # position=np.array([-40.5, -199, 59.58]),
+                position=np.array([0, 0, 0.5]),
                 name="wagon",
                 wheel_dof_names=["wheel_front_left_joint", "wheel_front_right_joint", "wheel_rear_left_joint", "wheel_rear_right_joint"],
                 wheel_dof_indices=[3,2,5,4],
@@ -271,8 +273,8 @@ class IsaacSim(Node):
         # Create physics material for robot wheels
         wheel_material = PhysicsMaterial(
             name="wheel_material",
-            static_friction=2,
-            dynamic_friction=1.5,
+            static_friction=7,
+            dynamic_friction=2.5,
             restitution=0.1,
             prim_path= self.wagon_prim_path + "/wheels_material"
         )
@@ -307,9 +309,9 @@ class IsaacSim(Node):
         hydraulic_s = prim.GetAttribute("drive:angular:physics:stiffness")
         hydraulic_d = prim.GetAttribute("drive:angular:physics:damping")
         hydraulic_force = prim.GetAttribute("drive:angular:physics:maxForce")
-        hydraulic_s.Set(1000.00)
+        hydraulic_s.Set(10000.00)
         hydraulic_d.Set(150.00)
-        hydraulic_force.Set(2500.0)
+        hydraulic_force.Set(1500.0)
         #print("max efforts hydrolic:", self.robot_view.get_max_efforts(joint_indices=[1]))
         #self.robot_view.set_max_efforts([500.0], joint_indices=[1])
         #print("max efforts hydrolic:", self.robot_view.get_max_efforts(joint_indices=[1]))
@@ -339,8 +341,8 @@ class IsaacSim(Node):
             wheel_f = prim.GetAttribute("drive:angular:physics:maxForce")
             wheel_armature = prim.GetAttribute("physxJoint:armature")
             wheel_s.Set(0.00)
-            wheel_d.Set(1500.00)
-            wheel_f.Set(5000.00)
+            wheel_d.Set(4500.00)
+            wheel_f.Set(40000.00)
             wheel_armature.Set(4000.00)
 
         print("Armatures: ", self.robot_view.get_armatures(joint_indices=[2,3,4,5]))
@@ -383,7 +385,8 @@ def main():
 
     joint_states = joint_state_pub("wagon")
     gps_module = gps_pub( isaac_sim.wagon_prim_path + "/rtk_pole", init_lat=55.471650, init_lon=10.328990)
-    pose_publisher = pose_pub(isaac_sim.wagon_prim_path + "/base_link", "odom")
+    pose_publisher = pose_pub(isaac_sim.wagon_prim_path + "/base_link", "world")
+    rear_pose_publisher = pose_pub(isaac_sim.wagon_prim_path + "/rear_link", "world", "rear_link")
     i = 0
 
     isaac_sim.play_world()
@@ -412,6 +415,7 @@ def main():
                 lidar_sim.ros_pub()
                 
             pose_publisher.ros_pub()
+            rear_pose_publisher.ros_pub()
 
 
             joint_states.pub()

@@ -4,6 +4,7 @@ import rclpy
 from rclpy.node import Node
 from geometry_msgs.msg import Twist
 from sensor_msgs.msg import JointState
+from rosgraph_msgs.msg import Clock
 import numpy as np
 import time
 
@@ -42,6 +43,8 @@ class WheelVelTranslator(Node):
 		
 		# Create a subscriber to the topic /joint_states
 		self.joint_state_subscription = self.create_subscription(JointState, self.joint_state_topic, self.joint_state_callback, 10)
+		self.time_stamp = Clock()
+		self.clock = self.create_subscription(Clock, '/clock', self.clock_callback, 10)
 
 		# Create a publisher for the topic /joint_states_control. This topic publishes the joint velocities or positions
 		self.publisher_ = self.create_publisher(JointState, self.joint_state_control_topic, 10)
@@ -51,6 +54,9 @@ class WheelVelTranslator(Node):
 		self.v = 0.0
 
 
+
+	def clock_callback(self, msg):
+		self.time_stamp = msg
 
 	def cmd_vel_callback(self, msg):
 		self.v = msg.linear.x
@@ -69,6 +75,8 @@ class WheelVelTranslator(Node):
 	def send_control_vel(self):
 		v_wheels = self.calc_control_vel()
 		joint_state = JointState()
+		joint_state.header.stamp.sec = self.time_stamp.clock.sec
+		joint_state.header.stamp.nanosec = self.time_stamp.clock.nanosec
 		joint_state.name = ['wheel_front_left_joint', 'wheel_front_right_joint', 'wheel_rear_left_joint', 'wheel_rear_right_joint', 'hydraulic_joint']
 		#print(v_wheels)
 		joint_state.velocity = [v_wheels[0], v_wheels[1], v_wheels[2], v_wheels[3], 0.0]

@@ -21,6 +21,7 @@ setup(
     entry_points={
         'console_scripts': [
         'odom_test = testing.odom_test:main',
+        'subs_and_plots = testing.subs_and_plots:main',
         ],
     },
 )

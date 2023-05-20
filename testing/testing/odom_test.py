@@ -9,7 +9,7 @@ import time
 import datetime
 import pickle
 
-A_VEL = 0.0
+A_VEL = -0.5
 F_VEL = 2.0
 
 
@@ -18,15 +18,15 @@ class OdomTest(Node):
     def __init__(self, test_name=None):
         super().__init__('odom_test')
 
-        self.declare_parameter('odom_topic', 'odometry/local')
+        self.declare_parameter('odom_topic', '/odometry/local')
         self.odom_topic = self.get_parameter('odom_topic').get_parameter_value().string_value
         
         self.testname = test_name
 
         self.setup_sub_publisher()
 
-        #self.file_location = "/home/daniel/master_ws/src/Danitech-master/wagon_navigation/wagon_navigation/pose_data/"
-        self.file_location = "/home/danitech/master_ws/src/Danitech-master/wagon_navigation/wagon_navigation/pose_data/"
+        self.file_location = "/home/daniel/master_ws/src/Danitech-master/wagon_navigation/wagon_navigation/pose_data/"
+        # self.file_location = "/home/danitech/master_ws/src/Danitech-master/wagon_navigation/wagon_navigation/pose_data/"
 
         #Check if file location exists
         if not os.path.exists(self.file_location):
@@ -40,6 +40,8 @@ class OdomTest(Node):
         # intialize an array of Odometry type messages
         self.odom_msgs = []
         self.odom_gt_msgs = []
+        self.cmd_vel_msgs = []
+        self.rear_link_gt_msgs = []
 
 
 
@@ -63,6 +65,14 @@ class OdomTest(Node):
             self.odom_gt_callback,
             10)
         
+
+        self.odom_gt_subscription = self.create_subscription(
+            Odometry,
+            '/wagon/rear_link_pose_gt',
+            self.odom_rear_gt_callback,
+            10)
+        
+
         self.cmd_vel_subscription = self.create_subscription(
             Twist,
             'cmd_vel',
@@ -82,22 +92,26 @@ class OdomTest(Node):
         self.cmd_vel_publisher.publish(vel_msg)
 
     def odom_callback(self, msg):
-        if self.reached_speed:
-            self.odom_msgs.append(msg)
 
-        elif msg.twist.twist.linear.x >= self.cmd_vel_msg.linear.x * 0.9:
+        # if self.reached_speed:
+        self.odom_msgs.append(msg)
+
+
+    def odom_gt_callback(self, msg):
+        # if self.reached_speed:
+        self.odom_gt_msgs.append(msg)
+        if msg.twist.twist.linear.x >= self.cmd_vel_msg.linear.x * 0.9:
             print("reached speed")
             self.reached_speed = True
 
-    def odom_gt_callback(self, msg):
-        if self.reached_speed:
-            self.odom_gt_msgs.append(msg)
-        else:
-            pass
+    def odom_rear_gt_callback(self, msg):
+        # if self.reached_speed:
+        self.odom_gt_msgs.append(msg)
 
 
     def cmd_vel_callback(self, msg):
         self.cmd_vel_msg = msg
+        self.cmd_vel_msgs.append(msg)
 
     def get_reached_speed(self):
         return self.reached_speed
@@ -105,7 +119,8 @@ class OdomTest(Node):
     def save_data(self):
 
         with open(self.file_location + str(self.testname) + "_f_vel_" + str(F_VEL) + "_a_vel_" + str(A_VEL) + ".pkl", "wb") as f:
-            pickle.dump({'odom_gt' : self.odom_gt_msgs, 'odom' : self.odom_msgs}, f)
+            #pickle.dump({'odom_gt' : self.odom_gt_msgs, 'odom' : self.odom_msgs}, f)
+            pickle.dump({'base_link_gt' : self.odom_gt_msgs, 'rear_link_gt' : self.rear_link_gt_msgs, 'cmd_vel' : self.cmd_vel_msgs}, f)
         print("saved data to ", self.file_location + str(self.testname) + "_f_vel_" + str(F_VEL) + "_a_vel_" + str(A_VEL) + ".pkl")
 
 
@@ -169,7 +184,7 @@ def S_line_test(object, speed, angle, secs):
 def main(args=None):
     rclpy.init(args=args)
 
-    odom_test = OdomTest("straight_test")
+    odom_test = OdomTest("fast_turn_test")
 
     print("starting test")
 
@@ -177,7 +192,40 @@ def main(args=None):
 
     go_to_speed(odom_test, F_VEL)
 
-    straight_line_test(odom_test, F_VEL, 10)
+    for i in range(100):
+        odom_test.pub_cmd_vel(F_VEL, 0.0)
+        rclpy.spin_once(odom_test)
+        time.sleep(0.1)
+
+
+    # For 10 seconds pub cmd vel
+    # for i in range(40):
+    #     odom_test.pub_cmd_vel(F_VEL, A_VEL)
+    #     rclpy.spin_once(odom_test)
+    #     time.sleep(0.1)
+
+    # for i in range(50):
+    #     odom_test.pub_cmd_vel(F_VEL, 0.0)
+    #     rclpy.spin_once(odom_test)
+    #     time.sleep(0.1)
+
+
+    # for i in range(40):
+    #     odom_test.pub_cmd_vel(F_VEL, -A_VEL)
+    #     rclpy.spin_once(odom_test)
+    #     time.sleep(0.1)
+
+    # for i in range(20):
+    #         odom_test.pub_cmd_vel(F_VEL, 0.0)
+    #         rclpy.spin_once(odom_test)
+    #         time.sleep(0.1)
+
+
+
+
+
+
+    # straight_line_test(odom_test, F_VEL, 10)
     # S_line_test(odom_test, F_VEL, A_VEL, 5)
 
 
@@ -189,3 +237,4 @@ def main(args=None):
     rclpy.shutdown()
 
 
+ 

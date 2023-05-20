@@ -9,3 +9,5 @@
 *.pkl
 *.npy
 *.pickle
+
+*.png
