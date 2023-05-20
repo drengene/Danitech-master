@@ -21,7 +21,7 @@ def main():
     topic = "/wagon/base_link_pose_gt"
     gt_positions = load_from_bag(bagfile, topic)
     # Save to pickle
-    with open(bagfile, + '_gt.pkl', 'wb') as f:
+    with open(bagfile + '_gt.pkl', 'wb') as f:
         pickle.dump(gt_positions, f)
 
 

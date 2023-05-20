@@ -198,8 +198,8 @@ class IsaacSim(Node):
         #path = "/home/danitech/isaac_ws/environments/USD/grass_terrain.usd"
         #path = "/home/danitech/isaac_ws/environments/USD/Quarray_en_cantera.usd"
         #path = "/home/danitech/isaac_ws/environments/USD/fun_in_a_bun.usd"
-        path = "/home/danitech/isaac_ws/environments/USD/simple_ramp.usd"
-        #path = "/home/danitech/Documents/mesh_world.usd"
+        #path = "/home/danitech/isaac_ws/environments/USD/simple_ramp.usd"
+        path = "/home/danitech/Documents/mesh_world.usd"
         #path = "/home/danitech/isaac_ws/environments/USD/cube_box_world.usd"
 
         #path = "/home/danitech/master_ws/src/Danitech-master/wagon_isaac/usd/environments/warehouse.usd"    
@@ -261,7 +261,7 @@ class IsaacSim(Node):
         self.robot = self.world.scene.add(
             WheeledRobot(
                 prim_path=self.wagon_prim_path,
-                # position=np.array([-40.5, -199, 59.58]),
+                # position=np.array([-40.5, -199, 59.58]), # position for quarray placement
                 position=np.array([0, 0, 0.5]),
                 name="wagon",
                 wheel_dof_names=["wheel_front_left_joint", "wheel_front_right_joint", "wheel_rear_left_joint", "wheel_rear_right_joint"],
