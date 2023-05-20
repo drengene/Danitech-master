@@ -8,4 +8,6 @@
 *.ply
 *.pkl
 *.npy
+*.pickle
+
 *.png

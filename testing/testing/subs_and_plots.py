@@ -17,8 +17,10 @@ class MinimalSubscriber(Node):
 
 
         self.waypoints_received = False
+        self.waypoints = []
+        self.plan = []
         self.plan_received = False
-        
+        self.joint_states_msgs = []
         self.odometry_msgs = []
         self.odometry_received = False
         self.base_pose_gt_msgs = []
@@ -60,6 +62,11 @@ class MinimalSubscriber(Node):
             'joint_states_controller',
             self.joint_controller_callback,
             10)
+        self.joint_controller_subscriber = self.create_subscription(
+            JointState,
+            'joint_states',
+            self.joint_states_callback,
+            10)
         
         self.base_pose_gt_subscriber = self.create_subscription(
             Odometry,
@@ -78,6 +85,9 @@ class MinimalSubscriber(Node):
             self.odometry_ekf_callback,
             10)
 
+    def joint_states_callback(self, msg):
+        self.joint_states_msgs.append(msg)
+        self.joint_states_received = True
 
     def odometry_ekf_callback(self, msg):
         self.odometry_msgs.append(msg)
@@ -131,7 +141,7 @@ class MinimalSubscriber(Node):
         else:
             return None
 
-    def stop_and_save(self, name="island_boy_full_ekf"):
+    def stop_and_save(self, name="friction_v2_df_1"):
         if self.cmd_vel.linear.x == 0 and self.cmd_vel.angular.z == 0:
             with open("/home/daniel/Documents/master/rosbags/pose_data/" + str(name) + ".pkl", "wb") as f:
                 pickle.dump({'base_link_pose_gt' : self.base_pose_gt_msgs,
@@ -139,11 +149,13 @@ class MinimalSubscriber(Node):
                              'wayposes' : self.waypoints, 
                              'global_pln' : self.plan,
                              'cmd_vel' : self.cmd_vel_msgs, 
-                             'joint_state_controller' : self.joint_controller_msgs, 
+                             'joint_state_controller' : self.joint_controller_msgs,
+                             'joint_states' : self.joint_states_msgs,
                              'odometry_ekf' : self.odometry_msgs
                              },  f)
             print("Saved data")
             self.destroy_node()
+            exit()
 
             
 
