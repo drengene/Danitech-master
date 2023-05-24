@@ -10,9 +10,11 @@
 # /bin/python3 /home/junge/master_ws/src/Danitech-master/lmao/lmao/LocalizerNoRos.py 3200 3200
 # Code here
 
-for n_Rays in 50 100 200 400 800 1600 3200
+# for n_Rays in 50 100 200 400 800 1600 3200
+for n_Rays in 3200 1600 800 400 200 100 50
 do
-    for n_Particles in 50 100 200 400 800 1600 3200
+    # for n_Particles in 50 100 200 400 800 1600 3200
+    for n_Particles in 3200 1600 800 400 200 100 50
     do
         /bin/python3 /home/junge/master_ws/src/Danitech-master/lmao/lmao/LocalizerNoRos.py $n_Rays $n_Particles
     done

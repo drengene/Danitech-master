@@ -127,7 +127,7 @@ class Localizer(Node):
 		self.particle_pcd.points = o3d.utility.Vector3dVector(self.particles[:, :3])
 		dir_vecs = self.rotations.apply(np.array([[1, 0, 0]]))
 		self.particle_pcd.normals = o3d.utility.Vector3dVector(dir_vecs)
-		#self.viz.add_geometry(self.particle_pcd)
+		self.viz.add_geometry(self.particle_pcd)
 		self.viz.add_geometry(self.average_pcd)
 		self.render_option = self.viz.get_render_option()
 		self.render_option.point_show_normal = True
@@ -205,8 +205,7 @@ class Localizer(Node):
 		colors[:, 1] = self.probabilities / np.max(self.probabilities)
 		colors[:, 0] = 1 - (self.probabilities / np.max(self.probabilities))
 		self.particle_pcd.colors = o3d.utility.Vector3dVector(colors)
-
-		
+		self.viz.update_geometry(self.particle_pcd)
 
 		avg_pos, avg_rot = self.get_centroid()
 
@@ -372,7 +371,7 @@ class Localizer(Node):
 		# Perturb the particles
 		new_particles[self.n_particles_to_keep:, :3] = new_particles[self.n_particles_to_keep:, :3] + xyz
 		# Create a new probability array
-		new_probabilities[self.n_particles_to_keep:] = self.probabilities[indices] * 0.9 # Discount the probability
+		new_probabilities[self.n_particles_to_keep:] = self.probabilities[indices] * 0.8 # Discount the probability
 		new_probabilities = new_probabilities / np.sum(new_probabilities)
 
 		# New rotations
@@ -708,6 +707,8 @@ class Localizer(Node):
 		# If probability is nan dont
 		if not(np.isnan(d_processed).any() or np.isnan(cos_processed).any()):
 			self.probabilities = self.probabilities * (1-self.particle_learning_rate) + ((d_processed*3 + cos_processed)/4) * self.particle_learning_rate
+		else:
+			print("Nan in probabilities")
 
 		self.best_index = np.argmax(self.probabilities)
 
