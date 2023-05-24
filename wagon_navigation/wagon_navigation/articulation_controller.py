@@ -31,6 +31,7 @@ class articulationController(Node):
     def __init__(self, waypoints=None):
         super().__init__('articulation_controller')
 
+        print("Starting articulation controller")
         # Declare parameters related to topic names
         self.declare_parameter('cmd_vel_topic', '/cmd_vel', ParameterDescriptor(description="Command velocity topic name"))
         self.declare_parameter('base_link_frame', 'base_link', ParameterDescriptor(description="Base link frame name"))
