@@ -37,16 +37,16 @@ NPDTYPE_DATATYPE = {
 }
 
 
-def unstagger(self, data, unstagger_array):
+def unstagger(data, unstagger_array):
 		# Check if data is a dictionary
 		if isinstance(data, dict):
 			for key, value in data.items():
-				data[key] = self.unstagger(value)
+				data[key] = unstagger(value, unstagger_array)
 			return data
 		# Check if data is a list
 		elif isinstance(data, list):
 			for i, value in enumerate(data):
-				data[i] = self.unstagger(value)
+				data[i] = unstagger(value, unstagger_array)
 			return data
 		# Check if data is a numpy array
 		elif isinstance(data, np.ndarray):
@@ -75,7 +75,7 @@ def extract_PointCloud2_data(msg, unstagger_array = None , visualize=False):
     
     #lidar = Lidar.Lidar("/home/junge/master_ws/src/Danitech-master/Brainstorm/o3d/2023-03-09-11-59-56_OS-0-128-992037000169-1024x10.json")
     #lidar.unstagger(data_dict)
-    if unstagger_array:
+    if unstagger_array is not None:
         unstagger(data_dict, unstagger_array)
 
     if visualize:

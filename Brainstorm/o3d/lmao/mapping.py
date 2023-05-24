@@ -37,7 +37,7 @@ class Map:
 		t0 = time.time()
 		clean = remove_significant_differences_faster(result, threshold=threshold)
 		t1 = time.time()
-		print("Time to remove significant differences faster: ", t1-t0)
+		# print("Time to remove significant differences faster: ", t1-t0)
 
 		# Extend clean image to include border points
 		clean = np.concatenate((clean[0:1,:,:], clean, clean[-1:,:,:]), axis=0)
@@ -46,7 +46,7 @@ class Map:
 		# Get a binary mask of the points that are not the null vector in the "clean" image
 		mask = np.logical_and(np.logical_and(clean[:, :, 0] != 0, clean[:, :, 1] != 0), clean[:, :, 2] != 0)
 		
-		print("Remaining values in mask", np.sum(mask))
+		# print("Remaining values in mask", np.sum(mask))
 
 		mask2 = np.ones_like(mask)
 
@@ -69,14 +69,17 @@ class Map:
 		mask[:, 0] = 1
 		mask[:, -1] = 1
 
-		print("Shape of mask: ", mask.shape)
+		# print("Shape of mask: ", mask.shape)
 
 		pints = np.array(np.nonzero(mask)).T
-		print("Shape of pints: ", pints.shape)
+		# print("Shape of pints: ", pints.shape)
 		#pints[:, 0] = pints[:, 0] * self.ratio
 
 		# Find the triangulation of the points in the mask
+		t0 = time.time()
 		tri = Delaunay(pints)
+		t1 = time.time()
+		# print("Time to triangulate: ", t1-t0)
 
 		# Get the points and simplices from the triangulation
 		points = tri.points
@@ -87,7 +90,7 @@ class Map:
 		# Get index of points in the right column
 		right_column = np.where(points[:, 1] == mask.shape[1]-1)[0]
 		left_column = np.where(points[:, 1] == 0)[0]
-		print("Right column: ", right_column)
+		# print("Right column: ", right_column)
 
 		for i in range(len(right_column)-1):
 			simplex = [[left_column[i], right_column[i], right_column[i+1]], [left_column[i], right_column[i+1], left_column[i+1]]]

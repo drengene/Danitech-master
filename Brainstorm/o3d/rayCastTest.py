@@ -170,7 +170,7 @@ if __name__ == "__main__":
 	# plt.show()
 	# plt.imshow(depth)
 	# plt.show()
-	exit()
+
 	newmap = Map()
 	t0 = time()
 	mesh = newmap.create_mesh(image, depth)
@@ -195,12 +195,13 @@ if __name__ == "__main__":
 	non_manifold_pcd.points = o3d.utility.Vector3dVector(points[non_manifold])
 	non_manifold_pcd.paint_uniform_color([1, 0, 0])
 
-	o3d.visualization.draw_geometries([non_manifold_pcd])
+	#o3d.visualization.draw_geometries([non_manifold_pcd])
 
+	o3d.visualization.draw_geometries([mesh])
 
-	o3d.visualization.draw_geometries([mesh, non_manifold_pcd], lookat = np.array(np.float64([ -0.5385805773511031, -2.7543633327825869, -0.50953180767962569 ])), 
-                                  up = np.array(np.float64([ 0.0, 0.0, 1 ])), 
-                                  front = np.array(np.float64([ 0.84732198172019557, -0.52728541423993913, 0.063368377157510217 ])), zoom = 0.16 )
+	# o3d.visualization.draw_geometries([mesh, non_manifold_pcd], lookat = np.array(np.float64([ -0.5385805773511031, -2.7543633327825869, -0.50953180767962569 ])), 
+    #                               up = np.array(np.float64([ 0.0, 0.0, 1 ])), 
+    #                               front = np.array(np.float64([ 0.84732198172019557, -0.52728541423993913, 0.063368377157510217 ])), zoom = 0.16 )
 
 	
 

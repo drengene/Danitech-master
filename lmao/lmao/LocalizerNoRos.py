@@ -13,11 +13,46 @@ import cv2
 
 from PyQt5.QtWidgets import QFileDialog, QWidget, QApplication
 
-#test_file_loc = "/home/danitech/master_ws/src/Danitech-master/lmao/lmao/test_data2/"
-test_file_loc = "/home/junge/master_ws/src/Danitech-master/lmao/lmao/test_data2/"
+test_file_loc = "/home/danitech/master_ws/src/Danitech-master/lmao/lmao/td_400p_100r/"
+#test_file_loc = "/home/junge/master_ws/src/Danitech-master/lmao/lmao/td_400p_100r/"
 
 
 import logging
+
+def ray_select_test(lambda_weight_, n):
+	rclpy.init()
+	print("Starting test with " + str(lambda_weight_) + " lambda, which is test number " + str(n))
+	lambda_now = float(lambda_weight_)
+	bag_file = "/home/danitech/Documents/bags/island_boy_to_rule_them_all"
+	localizer = Localizer(ros=False, 
+		lambda_weight=lambda_weight_, 
+		fname=(test_file_loc + str(lambda_now) + "lambda_" + str(n) + "test.pkl"), 
+		nname="xD"+str(lambda_now) + "lambda_" + str(n) + "test")
+	with Reader(bag_file) as reader:
+		print("We in da bag")
+		#for connection in reader.connections:
+			#print(connection.topic, connection.msgtype)
+		for connection, timestamp, rawdata in reader.messages():
+			if connection.topic == "/wagon/base_scan/lidar_data":
+				msg = deserialize_cdr(rawdata, connection.msgtype)
+				localizer.lidar_callback(msg)
+				#localizer.viz_loop()
+			elif connection.topic == "/wagon/base_link_odom_gt":
+				msg = deserialize_cdr(rawdata, connection.msgtype)
+
+				time1 = msg.header.stamp.sec + msg.header.stamp.nanosec * 1e-9
+				if time1 - time0 > 10:
+					print(time1)
+					time0 = time1
+				localizer.odom_callback(msg)
+			elif connection.topic == "/cmd_vel":
+				msg = deserialize_cdr(rawdata, connection.msgtype)
+				if localizer.cmd_vel_callback(msg) == False:
+					break
+
+
+
+
 
 def this(i, j):
 	i = int(i)
@@ -78,7 +113,7 @@ def main(args=None):
 		time.sleep(2)
 
 		i = 1000 # number of rays
-		j = 1000 # number of particles
+		j = 800 # number of particles
 
 		print("Starting test with " + str(i) + " rays and " + str(j) + " particles")
 
@@ -125,4 +160,5 @@ def main(args=None):
 
 if __name__ == "__main__":
 	# this(sys.argv[1], sys.argv[2])
-	main()
+	#main()
+	ray_select_test(sys.argv[1], sys.argv[2])
