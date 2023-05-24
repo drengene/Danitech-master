@@ -706,6 +706,11 @@ class Localizer(Node):
 
 		#self.probabilities = self.probabilities + ((d_processed + cos_processed) / 2 )
 		# If probability is nan dont
+		# Print how many nan values there are if there are any
+		if np.isnan(d_processed).any():
+			print(np.isnan(d_processed).sum())
+		if np.isnan(cos_processed).any():
+			print(np.isnan(cos_processed).sum())
 		# Set all values of d_processed, which are nan to 0
 		d_processed[np.isnan(d_processed)] = 0
 		cos_processed[np.isnan(cos_processed)] = 0
