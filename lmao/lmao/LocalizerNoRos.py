@@ -25,9 +25,10 @@ def ray_select_test(lambda_weight_, n):
 	lambda_now = float(lambda_weight_)
 	bag_file = "/home/danitech/Documents/bags/island_boy_to_rule_them_all"
 	localizer = Localizer(ros=False, 
-		lambda_weight=lambda_weight_, 
-		fname=(test_file_loc + str(lambda_now) + "lambda_" + str(n) + "test.pkl"), 
-		nname="xD"+str(lambda_now) + "lambda_" + str(n) + "test")
+		lambda_weight=lambda_now, 
+		fname=(test_file_loc + str(lambda_weight_) + "lambda_" + str(n) + "test.pkl"), 
+		nname="xD"+lambda_weight_[0]+"dot"+lambda_weight_[2] + "lambda_" + str(n) + "test")
+	time0 = 0
 	with Reader(bag_file) as reader:
 		print("We in da bag")
 		#for connection in reader.connections:
