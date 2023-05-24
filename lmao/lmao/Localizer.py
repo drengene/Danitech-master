@@ -719,6 +719,9 @@ class Localizer(Node):
 		else:
 			print("Nan in probabilities")
 
+		# Normalize probabilities
+		self.probabilities = self.probabilities / np.sum(self.probabilities)
+
 		self.best_index = np.argmax(self.probabilities)
 
 		self.best_indices = np.argsort(self.probabilities)
