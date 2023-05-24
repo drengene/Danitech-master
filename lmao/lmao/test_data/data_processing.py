@@ -137,12 +137,13 @@ plt.figure()
 plt.imshow(dists, norm=LogNorm())
 # plt.colorbar()
 # Format colorbar as 4.123 instead of 10^4
-plt.colorbar(format="%.3f", ticks=[0.1, 0.2, 0.5, 1, 2, 5, 10])
+plt.colorbar(format="%.2f", ticks=[0.1, 0.2, 0.5, 1, 2, 5, 10])
 plt.xticks(np.arange(len(incs)), incs)
 plt.yticks(np.arange(len(incs)), incs)
 plt.xlabel("Particles")
 plt.ylabel("Rays")
 plt.title("RMSE of distance to ground truth")
+plt.savefig("localizer_test_rmse.png", dpi=300)
 plt.show()
 
 plt.figure()
@@ -157,18 +158,33 @@ plt.show()
 
 plt.figure()
 plt.imshow(times/total_time, norm=LogNorm())
-plt.colorbar()
 plt.xticks(np.arange(len(incs)), incs)
 plt.yticks(np.arange(len(incs)), incs)
+# Format colorbar as 4.123 instead of 10^4
+plt.colorbar(format="%.2f", ticks=[0.1, 0.2, 0.5, 1, 2, 5, 10, 20])
 plt.xlabel("Particles")
 plt.ylabel("Rays")
-plt.title("Computation time normalized to total time")
+plt.title("Computation time normalized to total time [s]")
+# Set size of figure
 # Add value on top of each pixel
 for i in range(len(incs)):
 	for j in range(len(incs)):
 		plt.text(j, i, round(times[i, j]/total_time, 2), ha="center", va="center", color="w")
-plt.show()
 
+# Plot a line to the right of each pixel, if the value goes above 1 from the previous pixel
+for i in range(len(incs)):
+	for j in range(len(incs)-1):
+		if times[i, j]/total_time < 1 and times[i, j+1]/total_time > 1:
+			plt.plot([j+0.5, j+0.5], [i-0.5, i+0.5], color="r", linewidth=2)
+# Plot a line below each pixel, if the value goes above 1 from the pixel above
+for i in range(len(incs)-1):
+	for j in range(len(incs)):
+		if times[i, j]/total_time < 1 and times[i+1, j]/total_time > 1:
+			plt.plot([j-0.5, j+0.5], [i+0.5, i+0.5], color="r", linewidth=2)
+
+# Save figure
+plt.savefig("localizer_test_computation_time.png", dpi=300)
+plt.show()
 # perf = np.divide(dists, times)
 # plt.figure()
 # plt.imshow(perf)

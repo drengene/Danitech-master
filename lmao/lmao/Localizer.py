@@ -51,7 +51,7 @@ VIRTUAL_PLAYBACK = False
 
 
 class Localizer(Node):
-	def __init__(self, ros=True, n_rays=1000, n_particles=500, fname=None, nname="John"):
+	def __init__(self, ros=True, n_rays=100, n_particles=400, fname=None, nname="John", lambda_weight=0.75):
 		print("Localizer initialized with {} rays and {} particles".format(n_rays, n_particles))
 		super().__init__(nname)
 		self.filename = fname
@@ -59,13 +59,14 @@ class Localizer(Node):
 		np.seterr(invalid='ignore')
 		self.ros = ros
 		self.n_rays = n_rays
+		self.lambda_w = lambda_weight
 
 		self.all_positions = []
 
 		# Declare parameters
 		from rcl_interfaces.msg import ParameterDescriptor
 		self.declare_parameter('map_path', '/home/junge/Documents/mesh_map/island_boy2.ply', ParameterDescriptor(description="Path to the map file"))
-		#self.declare_parameter('map_path', "/home/danitech/Documents/maps/island_boy2.ply", ParameterDescriptor(description="Path to the map file"))
+		self.declare_parameter('map_path', "/home/danitech/Documents/maps/island_boy2.ply", ParameterDescriptor(description="Path to the map file"))
 		self.declare_parameter('lidar_topic', "/wagon/base_scan/lidar_data", ParameterDescriptor(description="Topic to subscribe to for lidar data"))
 		self.declare_parameter('max_range', 90000, ParameterDescriptor(description="Maximum range of the lidar in mm"))
 		self.declare_parameter('min_range', 2300, ParameterDescriptor(description="Minimum range of the lidar in mm"))
@@ -706,7 +707,7 @@ class Localizer(Node):
 		#self.probabilities = self.probabilities + ((d_processed + cos_processed) / 2 )
 		# If probability is nan dont
 		if not(np.isnan(d_processed).any() or np.isnan(cos_processed).any()):
-			self.probabilities = self.probabilities * (1-self.particle_learning_rate) + ((d_processed*3 + cos_processed)/4) * self.particle_learning_rate
+			self.probabilities = self.probabilities * (1-self.particle_learning_rate) + ((d_processed*self.lambda_w + cos_processed*(1-self.lambda_w))) * self.particle_learning_rate # Original was (d_processed*3 + cos_processed) / 4
 		else:
 			print("Nan in probabilities")
 
