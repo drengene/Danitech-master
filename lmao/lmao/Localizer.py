@@ -706,6 +706,9 @@ class Localizer(Node):
 
 		#self.probabilities = self.probabilities + ((d_processed + cos_processed) / 2 )
 		# If probability is nan dont
+		# Set all values of d_processed, which are nan to 0
+		d_processed[np.isnan(d_processed)] = 0
+		cos_processed[np.isnan(cos_processed)] = 0
 		if not(np.isnan(d_processed).any() or np.isnan(cos_processed).any()):
 			self.probabilities = self.probabilities * (1-self.particle_learning_rate) + ((d_processed*self.lambda_w + cos_processed*(1-self.lambda_w))) * self.particle_learning_rate # Original was (d_processed*3 + cos_processed) / 4
 		else:
