@@ -1,0 +1,4 @@
+Time for 100 rays and 100 particles: 32.22225522994995
+Time for 100 rays and 1000 particles: 145.69087290763855
+Time for 100 rays and 100 particles: 32.651389598846436
+Time for 1000 rays and 1000 particles: 248.6053810119629

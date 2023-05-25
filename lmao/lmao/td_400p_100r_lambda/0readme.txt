@@ -1,1 +1,0 @@
-Testing lambda, which is used to evaluate performance of particles. A value of 1 means that only the difference in depth image is considered. A value of 0 means that only the difference in normal image is considered.

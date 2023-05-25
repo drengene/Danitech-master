@@ -20,7 +20,6 @@ from scipy.spatial.transform import Rotation as R
 from matplotlib.colors import LogNorm
 
 import matplotlib.patches as mpatches
-from matplotlib.ticker import FormatStrFormatter, NullFormatter
 
 def get_localization_data(file_path):
 
@@ -84,23 +83,23 @@ gt_positions, gt_orientations, gt_clock = load_from_bag(bag_file, '/wagon/base_l
 pkl_files.sort()
 
 n_tests = []
-n_lambdas = []
+n_gammas = []
 for pkl in pkl_files:
 	n_tests.append(int(pkl.split("/")[-1].split("_")[1].split("test")[0]))
-	n_lambdas.append(float(pkl.split("/")[-1].split("_")[0].split("lambda")[0]))
+	n_gammas.append(float(pkl.split("/")[-1].split("_")[0].split("gamma")[0]))
 
-n_tests = np.max(n_tests) # Number of tests per lambda
-n_lambdas = np.max(n_lambdas) # Number of lambdas tested
+n_tests = np.max(n_tests) # Number of tests per gamma
+n_gammas = np.max(n_gammas) # Number of gammas tested
 
 # Create dictionary for storing data
 rmse_dict = {}
 avg_dist_dict = {}
 
 for pkl in pkl_files:
-	# pkl filename is 0.5lambda_2test.pkl. Get lambda and n_test
-	n_lambda = float(pkl.split("/")[-1].split("_")[0].split("lambda")[0])
+	# pkl filename is 0.5gamma_2test.pkl. Get gamma and n_test
+	n_gamma = float(pkl.split("/")[-1].split("_")[0].split("gamma")[0])
 	n_test = int(pkl.split("/")[-1].split("_")[1].split("test")[0])
-	print("n_lambda: ", n_lambda)
+	print("n_gamma: ", n_gamma)
 	print("n_test: ", n_test)
 		
 	localization_dict = get_localization_data(pkl)
@@ -129,11 +128,11 @@ for pkl in pkl_files:
 	#print("RMSE with " + str(n_rays) + " rays and " + str(n_particles) + " particles: ", rmse_dist)
 	# Place in correct position in dist
 	# Place data in dictionary
-	if n_lambda not in rmse_dict:
-		rmse_dict[n_lambda] = []
-		avg_dist_dict[n_lambda] = []
-	rmse_dict[n_lambda].append(rmse_dist)
-	avg_dist_dict[n_lambda].append(np.mean(dist))
+	if n_gamma not in rmse_dict:
+		rmse_dict[n_gamma] = []
+		avg_dist_dict[n_gamma] = []
+	rmse_dict[n_gamma].append(rmse_dist)
+	avg_dist_dict[n_gamma].append(np.mean(dist))
 
 # Print dicts formatted such that a keys values are printed on the same line
 print("RMSE: ")
@@ -149,8 +148,7 @@ for key, value in avg_dist_dict.items():
 	print("Std: ", np.std(value))
 
 
-
-imgsize = (5, 5)
+imgsize = (5, 3)
 
 # Extract the parameter values and RMSE lists from the dictionary
 parameters = list(rmse_dict.keys())
@@ -160,8 +158,8 @@ fig, ax = plt.subplots()
 # Create the boxplot
 boxplot = ax.boxplot(rmse_values, patch_artist=True, notch=True)
 # Add labels and title
-# X label is greek letter lambda
-ax.set_xlabel(r'$\lambda$')
+# X label is greek letter gamma
+ax.set_xlabel(r'$\gamma$')
 ax.set_ylabel('RMSE')
 ax.set_title('RMSE Box Plot (' + str(n_tests+1) + ' tests)')
 # Set x-axis tick labels
@@ -170,8 +168,6 @@ ax.set_xticklabels(parameters)
 colors = ['lightblue', 'lightgreen', 'lightpink', 'lightyellow', 'lightgrey']
 for patch, color in zip(boxplot['boxes'], colors):
     patch.set_facecolor(color)
-#Make the y-axis logarithmic
-ax.set_yscale('log')
 # Add gridlines
 ax.yaxis.grid(True)
 # Set size
@@ -180,18 +176,13 @@ fig.set_size_inches(imgsize)
 plt.subplots_adjust(bottom=0.2)
 # Remove the white space from the right of the plot
 plt.subplots_adjust(right=0.98)
-# Set y ticks
-ax.yaxis.set_minor_formatter(NullFormatter())
-ax.yaxis.set_major_formatter(FormatStrFormatter("%1.1f"))
-ax.set_yticks([0.1, 0.2, 0.5, 1, 2, 5, 10])
-
 # save the figure
-fig.savefig(os.path.dirname(os.path.realpath(__file__)) + "/Localizer_lambda_RMSE_boxplot.png")
+fig.savefig(os.path.dirname(os.path.realpath(__file__)) + "/Localizer_gamma_RMSE_boxplot.png")
 # Show the plot
 plt.show()
 
 # A good caption for this plot is:
-# "Average distance between localization and ground truth for different values of lambda"
+# "Average distance between localization and ground truth for different values of gamma"
 
 
 # Plot average distance
@@ -201,7 +192,7 @@ fig, ax = plt.subplots()
 # Create the boxplot
 boxplot = ax.boxplot(avg_dist_values, patch_artist=True, notch=True)
 # Add labels and title
-ax.set_xlabel(r'$\lambda$')
+ax.set_xlabel(r'$\gamma$')
 ax.set_ylabel('Average distance')
 # Title should convey the number of tests
 ax.set_title('Average distance Box Plot (' + str(n_tests+1) + ' tests)')
@@ -211,8 +202,6 @@ ax.set_xticklabels(parameters)
 colors = ['lightblue', 'lightgreen', 'lightpink', 'lightyellow', 'lightgrey']
 for patch, color in zip(boxplot['boxes'], colors):
 	patch.set_facecolor(color)
-#Make the y-axis logarithmic
-ax.set_yscale('log')
 # Add gridlines
 ax.yaxis.grid(True)
 # Set size
@@ -221,14 +210,10 @@ fig.set_size_inches(imgsize)
 plt.subplots_adjust(bottom=0.2)
 # Remove the white space at the right of the plot
 plt.subplots_adjust(right=0.98)
-# Set y ticks
-ax.yaxis.set_minor_formatter(NullFormatter())
-ax.yaxis.set_major_formatter(FormatStrFormatter("%1.1f"))
-ax.set_yticks([0.1, 0.2, 0.5, 1, 2, 5, 10])
 # save the figure
-fig.savefig(os.path.dirname(os.path.realpath(__file__)) + "/Localizer_lambda_avg_dist_boxplot.png")
+fig.savefig(os.path.dirname(os.path.realpath(__file__)) + "/Localizer_gamma_avg_dist_boxplot.png")
 # Show the plot
 plt.show()
 
 # A good caption for this plot is:
-# "RMSE between localization and ground truth for different values of lambda"
+# "RMSE between localization and ground truth for different values of gamma"
