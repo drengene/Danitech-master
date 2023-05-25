@@ -51,8 +51,8 @@ VIRTUAL_PLAYBACK = False
 
 
 class Localizer(Node):
-	def __init__(self, ros=True, n_rays=100, n_particles=400, fname=None, nname="John", lambda_weight=0.75):
-		print("Localizer initialized with {} rays and {} particles".format(n_rays, n_particles))
+	def __init__(self, ros=True, n_rays=100, n_particles=400, fname=None, nname="John", lambda_weight=0.75, gamma_weight=0.7):
+		print("Localizer initialized with {} rays and {} particles and {} lambda weight and {} gamma weight".format(n_rays, n_particles, lambda_weight, gamma_weight))
 		super().__init__(nname)
 		self.filename = fname
 		np.seterr(divide='ignore')
@@ -60,6 +60,7 @@ class Localizer(Node):
 		self.ros = ros
 		self.n_rays = n_rays
 		self.lambda_w = lambda_weight
+		self.gamma_w = gamma_weight
 
 		self.all_positions = []
 
@@ -859,7 +860,7 @@ class Localizer(Node):
 		# print("Dist probabilities shape: {}".format(dist_probabilities.shape))
 
 		# Average the two probabilities
-		probabilities = depth_gradient*0.3 + dist_probabilities*0.7
+		probabilities =  dist_probabilities*self.gamma_w + depth_gradient*(1-self.gamma_w) # Was dist*0.7 + depth*0.3
 		probabilities_multiply = depth_gradient * dist_probabilities
 		probabilities_multiply = probabilities_multiply / np.sum(probabilities_multiply)
 

@@ -19,7 +19,7 @@ test_file_loc = "/home/danitech/master_ws/src/Danitech-master/lmao/lmao/td_400p_
 
 import logging
 
-def ray_select_test(lambda_weight_, n):
+def evaluate_method_test(lambda_weight_, n):
 	rclpy.init()
 	print("Starting test with " + str(lambda_weight_) + " lambda, which is test number " + str(n))
 	lambda_now = float(lambda_weight_)
@@ -50,6 +50,38 @@ def ray_select_test(lambda_weight_, n):
 				msg = deserialize_cdr(rawdata, connection.msgtype)
 				if localizer.cmd_vel_callback(msg) == False:
 					break
+
+
+def evaluate_ray_select(gamma_weight_, n):
+	rclpy.init()
+	print("Starting test with " + str(gamma_weight_) + " gamma, which is test number " + str(n))
+	gamma_now = float(gamma_weight_)
+	bag_file = "/home/danitech/Documents/bags/island_boy_to_rule_them_all"
+	localizer = Localizer(ros=False,
+		gamma_weight=gamma_now,
+		fname=(test_file_loc + str(gamma_weight_) + "gamma_" + str(n) + "test.pkl"),
+		nname="xD"+gamma_weight_[0]+"dot"+gamma_weight_[2] + "gamma_" + str(n) + "test")
+	time0 = 0
+	with Reader(bag_file) as reader:
+		print("We in da bag")
+		for connection, timestamp, rawdata in reader.messages():
+			if connection.topic == "/wagon/base_scan/lidar_data":
+				msg = deserialize_cdr(rawdata, connection.msgtype)
+				localizer.lidar_callback(msg)
+				#localizer.viz_loop()
+			elif connection.topic == "/wagon/base_link_odom_gt":
+				msg = deserialize_cdr(rawdata, connection.msgtype)
+
+				time1 = msg.header.stamp.sec + msg.header.stamp.nanosec * 1e-9
+				if time1 - time0 > 10:
+					print(time1)
+					time0 = time1
+				localizer.odom_callback(msg)
+			elif connection.topic == "/cmd_vel":
+				msg = deserialize_cdr(rawdata, connection.msgtype)
+				if localizer.cmd_vel_callback(msg) == False:
+					break
+
 
 
 
@@ -162,4 +194,5 @@ def main(args=None):
 if __name__ == "__main__":
 	# this(sys.argv[1], sys.argv[2])
 	#main()
-	ray_select_test(sys.argv[1], sys.argv[2])
+	# evaluate_method_test(sys.argv[1], sys.argv[2])
+	evaluate_ray_select(sys.argv[1], sys.argv[2])
