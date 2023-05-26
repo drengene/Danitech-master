@@ -84,12 +84,12 @@ class WheelOdometry(Node):
 			#wheel_odom_rear.twist.angular.z = -(wheel_rl_vel - wheel_rr_vel) * self.wheel_radius / self.rear_wheel_separation
 
 
-			Covariance = np.array([1e-2, 0, 0, 0, 0, 0,
-							0, 1e-2, 0, 0, 0, 0,
-							0, 0, 1e1, 0, 0, 0,
-							0, 0, 0, 1e3, 0, 0,
-							0, 0, 0, 0, 1e3, 0,
-							0, 0, 0, 0, 0, 1e-2])
+			Covariance = np.array([1e-3, 0, 0, 0, 0, 0,
+									0, 1e-4, 0, 0, 0, 0,
+									0, 0, 0.5, 0, 0, 0,
+									0, 0, 0, 0.3, 0, 0,
+									0, 0, 0, 0, 0.3, 0,
+									0, 0, 0, 0, 0, 1e-2])
 							# Covariance of x, y, z, roll, pitch, yaw (in that order)
 							# The covariance of the velocity is set to 1e-2 for x and y, and 1e3 for yaw
 							# This is because the wheels per definition do not move in the y direction.
@@ -99,11 +99,11 @@ class WheelOdometry(Node):
 
 			# Publish the wheel odometry
 			self.publisher.publish(wheel_odom_front)
-			# self.publisher.publish(wheel_odom_rear)
+			self.publisher.publish(wheel_odom_rear)
 
 		
 	def configure_index(self, msg):
-		if not self.config_index:
+		if not self.config_index:	
 			self.wheel_fl = msg.name.index('wheel_front_left_joint')
 			self.wheel_fr = msg.name.index('wheel_front_right_joint')
 			self.wheel_rl = msg.name.index('wheel_rear_left_joint')
