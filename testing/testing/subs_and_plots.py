@@ -32,7 +32,7 @@ class MinimalSubscriber(Node):
         self.joint_controller_msgs = []
         self.joint_controller_received = False
         
-
+        print("Subscribing to topics")
         self.setup_subscribers()
 
 
@@ -141,9 +141,9 @@ class MinimalSubscriber(Node):
         else:
             return None
 
-    def stop_and_save(self, name="friction_v2_df_1"):
+    def stop_and_save(self, name="single_imu_rear"):
         if self.cmd_vel.linear.x == 0 and self.cmd_vel.angular.z == 0:
-            with open("/home/daniel/Documents/master/rosbags/pose_data/" + str(name) + ".pkl", "wb") as f:
+            with open("/home/daniel/Documents/master/rosbags/odom_test/" + str(name) + ".pkl", "wb") as f:
                 pickle.dump({'base_link_pose_gt' : self.base_pose_gt_msgs,
                              'rear_link_pose_gt' : self.rear_pose_gt_msgs,
                              'wayposes' : self.waypoints, 

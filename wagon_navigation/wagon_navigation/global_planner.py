@@ -27,17 +27,19 @@ class global_planner():
 
         self.adj_list = self.adjacency_list(self.mesh_map)
 
+        self.NORMAL_THRESHOLD = 0.75
+
         if load_valid_points_from_path:
            self.load_valid_verticies(load_valid_points_from_path)
         else:
-           self.determine_valid_vertices(0.85, 1.5, "/home/danitech/Documents/maps/island_boy_")
+           self.determine_valid_vertices(self.NORMAL_THRESHOLD , 0.25, "/home/daniel/Documents/master/maps/lab_mesh_")
                 
         # self.valid_points = np.ones(self.verticies.shape[0])
 
         # self.valid_points[self.vertex_normals[:, 2] < 0.8] = 0
 
         self.start_stop_chooser(self.mesh_map)
-        # self.points = np.array([127230, 335972, 517676, 38824])
+        #self.points = np.array([127230, 335972, 517676, 38824])
 
         #self.destroy_subscription(pose_subscriber)
         #self.points = np.array([50970, 558829])
@@ -272,7 +274,7 @@ class global_planner():
         # print("triangle normals:", np.asarray(triangle_mesh.triangle_normals)[2])
         # print("vertex normals:" , np.asarray(triangle_mesh.vertex_normals)[2])
         normals = np.asanyarray(triangle_mesh.triangle_normals)
-        normals[normals[:, 2] < 0.8] = 0
+        normals[normals[:, 2] < self.NORMAL_THRESHOLD] = 0
 
         triangle_mesh.triangle_normals = o3d.utility.Vector3dVector(normals)
         # triangle_mesh.vertex_normals = normals
@@ -287,8 +289,17 @@ class global_planner():
 
         # print(np.asarray(line_set.lines))
         
+        #Create a pcd from the vertex indecies in self.points and color them green
+        points = np.asarray(triangle_mesh.vertices)[self.points]
+        # create pcd from points
+        waypoints = o3d.geometry.PointCloud()
+        waypoints.points = o3d.utility.Vector3dVector(points)
+        waypoints.paint_uniform_color([0, 0, 1])
+
+
+
         # Visualize the mesh and path together
-        o3d.visualization.draw_geometries([triangle_mesh, line_set], point_show_normal=True)
+        o3d.visualization.draw_geometries([triangle_mesh, line_set, waypoints], point_show_normal=True)
 
 
 
@@ -296,7 +307,7 @@ class global_planner():
         print("Select start and stop points by holding shift, then clicking on the desired points")
 
         normals = np.asanyarray(mesh.triangle_normals)
-        normals[normals[:, 2] < 0.9] = 0
+        normals[normals[:, 2] < self.NORMAL_THRESHOLD] = 0
      
         mesh.triangle_normals = o3d.utility.Vector3dVector(normals)
 
@@ -306,6 +317,7 @@ class global_planner():
         
 
         index = np.where(self.valid_points == 1)[0]
+        index_normals = np.where(self.vertex_normals[:, 2] < self.NORMAL_THRESHOLD)[0]
 
         print("coloring invalid points")        
         # colors[index] = [0, 0, normal_z_color]
@@ -313,8 +325,9 @@ class global_planner():
 
         # colors[self.valid_points == 0] = [0.1, 0.1, 0]
 
-        colors[:] = [0.5, 0.5, 0.5]
-        #colors[index] = self.vertex_normals[index] * [0.7, 0.7, 0.2] + 0.5
+        colors[:] = [0.1, 0.8, 0.1]
+        colors[index_normals] = [0.6, 0.6, 0.6]
+        colors[index] = self.vertex_normals[index] * [0.7, 0.7, 0.2] + 0.5
 
         # for i in range(colors.shape[0]):
         #     if i in index:
@@ -561,7 +574,9 @@ class ros_planner(Node):
 
 def main():
     # global_planner("/home/daniel/Documents/master/isaac_map.ply", "/home/daniel/Documents/master/valid_points.npy")
-    planner =  global_planner("/home/daniel/Documents/master/maps/island_boy2.ply", "/home/daniel/Documents/master/maps/island_boy_valid_points_0.85_1.5.npy")
+    planner =  global_planner("/home/daniel/Documents/master/maps/lab_mesh.ply", "/home/daniel/Documents/master/maps/lab_mesh_valid_points_0.75_0.25.npy")
+
+    # planner =  global_planner("/home/daniel/Documents/master/maps/island_boy2.ply",  "/home/daniel/Documents/master/maps/island_boy2_valid_points_0.85_1.5.npy")
     # planner =  global_planner("/home/daniel/Documents/master/maps/quarray_map.ply", "/home/daniel/Documents/master/quarrayvalid_points_0.9_2.npy")
     # planner =  global_planner("/home/daniel/Documents/master/maps/quarray_map.ply", "/home/daniel/Documents/master/valid_points_0.8_2.npy")
     # planner = global_planner("/home/danitech/Documents/maps/easter_island_boy.ply", "/home/danitech/Documents/maps/island_boy_valid_points_0.85_1.5.npy")
