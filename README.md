@@ -1,4 +1,14 @@
 # Danitech-master
+## Read this before continuing!
+Welcome to the GitHub repository for our masters thesis "Autonomous driving of articulated steered vehicle in uneven terrain".
+We worked on creating a software suite for autonomous navigation in an uneven unstructured terrain with multiple levels.
+
+Before going too deep in this repository, we want to remind you that we attached this as a courtesy if you for any reason was interested in a deeper dive.
+It was never the intention that this repository would become available to anybody but us.
+We used this repository as a sandbox, which means it contains experiments, prototypes and some horrible code. 
+Not all the files seen here are part of the final project, but were part of the journey, so don't expect anything polished if you're going to a random file.
+
+Best of luck.
 
 ## Import submodules
 This repository includes submodules for some of its packages for easier management. 
