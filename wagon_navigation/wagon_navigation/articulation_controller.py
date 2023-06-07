@@ -115,7 +115,7 @@ class articulationController(Node):
                                                     self.base_link_position[1] + 2 * np.sin(self.base_link_orientation[2]),
                                                       self.base_link_position[2]], axis=0)
 
-        self.spline = self.gen_spline(_waypoints, 2.2)
+        self.spline = self.gen_spline(_waypoints, 2.0)
 
         # create a copy of waypoints with 4 additional dimensions
         self.wayposes = np.zeros((len(self.spline), 7))
@@ -381,21 +381,21 @@ class articulationController(Node):
 
         s_vals = np.array([])
 
-        if np.any(resolution*0.9 <= np.min(distances)):
-            print("resolution smaller than min distance")
-            for idx, dist in enumerate(cumulative_distances[:-1], ):
-                num_points = int(np.ceil((cumulative_distances[idx + 1] - dist)/resolution))
-                # print(num_points)
-                s_val = np.linspace(dist, cumulative_distances[idx + 1], num_points)
-                s_vals = np.append(s_vals, s_val[1:])
-        else:
-            print("resolution larger than min distance")
-            intermediate_dist = 0.0
-            for idx, dist in enumerate(distances[:-1], ):
-                intermediate_dist += dist
-                if intermediate_dist >= resolution:
-                    s_vals = np.append(s_vals, cumulative_distances[idx])
-                    intermediate_dist = 0.0
+        # if np.any(resolution*0.9 <= np.min(distances)):
+        #     print("resolution smaller than min distance")
+        #     for idx, dist in enumerate(cumulative_distances[:-1], ):
+        #         num_points = int(np.ceil((cumulative_distances[idx + 1] - dist)/resolution))
+        #         # print(num_points)
+        #         s_val = np.linspace(dist, cumulative_distances[idx + 1], num_points)
+        #         s_vals = np.append(s_vals, s_val[1:])
+        # else:
+        print("resolution larger than min distance")
+        intermediate_dist = 0.0
+        for idx, dist in enumerate(distances[:-1], ):
+            intermediate_dist += dist
+            if intermediate_dist >= resolution:
+                s_vals = np.append(s_vals, cumulative_distances[idx])
+                intermediate_dist = 0.0
 
 
 

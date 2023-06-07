@@ -16,6 +16,9 @@ class global_planner():
         #super().__init__('global_planner')
         # rclpy.init()
 
+        # start o3d server
+        # o3d.visualization.webrtc_server.enable_webrtc()
+
         self.load_ply_file(file_path)
         self.convert_to_tensor()
         #pose_subscriber = self.create_subscription(Odometry, "/wagon/base_link_pose_gt", self.pose_callback, 10)
@@ -27,19 +30,19 @@ class global_planner():
 
         self.adj_list = self.adjacency_list(self.mesh_map)
 
-        self.NORMAL_THRESHOLD = 0.75
+        self.NORMAL_THRESHOLD = 0.9
 
         if load_valid_points_from_path:
            self.load_valid_verticies(load_valid_points_from_path)
         else:
-           self.determine_valid_vertices(self.NORMAL_THRESHOLD , 0.25, "/home/daniel/Documents/master/maps/lab_mesh_")
+           self.determine_valid_vertices(self.NORMAL_THRESHOLD , 2.0, "/home/danitech/Documents/maps/quarry_new_")
                 
         # self.valid_points = np.ones(self.verticies.shape[0])
 
         # self.valid_points[self.vertex_normals[:, 2] < 0.8] = 0
 
-        # self.start_stop_chooser(self.mesh_map)
-        self.points = np.array([127230, 335972, 517676, 38824])
+        self.start_stop_chooser(self.mesh_map)
+        # self.points = np.array([127230, 335972, 517676, 38824])
 
         #self.destroy_subscription(pose_subscriber)
         #self.points = np.array([50970, 558829])
@@ -300,7 +303,7 @@ class global_planner():
 
         # Visualize the mesh and path together
         o3d.visualization.draw_geometries([triangle_mesh, line_set, waypoints], point_show_normal=True)
-
+        #draw([triangle_mesh, line_set, waypoints], point_show_normal=True)
 
 
     def start_stop_chooser(self, mesh):
@@ -311,7 +314,7 @@ class global_planner():
      
         mesh.triangle_normals = o3d.utility.Vector3dVector(normals)
 
-        
+
         # Color all the points in the mesh that are not in self.valid_points
         colors = np.asarray(mesh.vertex_colors)
         
@@ -574,10 +577,11 @@ class ros_planner(Node):
 
 def main():
     # global_planner("/home/daniel/Documents/master/isaac_map.ply", "/home/daniel/Documents/master/valid_points.npy")
-    planner =  global_planner("/home/daniel/Documents/master/maps/island_boy2.ply", "/home/daniel/Documents/master/maps/island_boy_valid_points_0.85_1.5.npy")
-    # planner =  global_planner("/home/daniel/Documents/master/maps/quarray_map.ply", "/home/daniel/Documents/master/quarrayvalid_points_0.9_2.npy")
+ #   planner =  global_planner("/home/daniel/Documents/master/maps/island_boy2.ply", "/home/daniel/Documents/master/maps/island_boy_valid_points_0.85_1.5.npy")
+    planner =  global_planner("/home/danitech/Documents/maps/quarray_new.ply", "/home/danitech/Documents/maps/quarry_new_valid_points_0.9_2.0.npy")
     # planner =  global_planner("/home/daniel/Documents/master/maps/quarray_map.ply", "/home/daniel/Documents/master/valid_points_0.8_2.npy")
-    planner = global_planner("/home/danitech/Documents/maps/easter_island_boy.ply", "/home/danitech/Documents/maps/island_boy_valid_points_0.85_1.5.npy")
+#    planner = global_planner("/home/danitech/Documents/maps/easter_island_boy.ply", "/home/danitech/Documents/maps/island_boy_valid_points_0.85_1.5.npy")
+    # planner = global_planner("/home/danitech/Documents/maps/mesh_map_odom.ply", "/home/danitech/Documents/maps/island_boy_valid_points_0.85_1.5.npy")
     #planner = global_planner("/home/danitech/master_ws/src/Danitech-master/wagon_navigation/wagon_navigation/pose_data/isaac_map.ply", "/home/danitech/master_ws/src/Danitech-master/wagon_navigation/wagon_navigation/pose_data/valid_points_0.8_2.npy")
     #global_planner("/home/daniel/Documents/master/isaac_map.ply", False)
     rclpy.init()
